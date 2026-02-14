@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movie Night 🍿</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      color: white;
+      font-size: 3em;
+      margin-bottom: 10px;
+    }
+
+    .header {
+      background: white;
+      padding: 20px;
+      border-radius: 15px;
+      margin-bottom: 30px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .user-select {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .user-select label {
+      font-weight: 600;
+      font-size: 1.1em;
+    }
+
+    select, button {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: 2px solid #667eea;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    select {
+      background: white;
+      min-width: 150px;
+    }
+
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      font-weight: 600;
+    }
+
+    button:hover {
+      background: #764ba2;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .actions {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      margin-top: 15px;
+    }
+
+    .movies-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 25px;
+      margin-top: 30px;
+    }
+
+    .movie-card {
+      background: white;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      transition: transform 0.3s, box-shadow 0.3s;
+      position: relative;
+    }
+
+    .movie-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+    }
+
+    .movie-card.watched {
+      opacity: 0.6;
+      filter: grayscale(60%);
+    }
+
+    .movie-card.winner {
+      border: 4px solid gold;
+      box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+    }
+
+    .poster {
+      width: 100%;
+      height: 375px;
+      object-fit: cover;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .movie-info {
+      padding: 15px;
+    }
+
+    .movie-title {
+      font-size: 1.2em;
+      font-weight: 700;
+      margin-bottom: 5px;
+      color: #333;
+    }
+
+    .movie-year {
+      color: #666;
+      font-size: 0.9em;
+      margin-bottom: 10px;
+    }
+
+    .proposer {
+      font-size: 0.85em;
+      color: #667eea;
+      font-weight: 600;
+      margin-bottom: 15px;
+    }
+
+    .movie-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .vote-btn {
+      flex: 1;
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .vote-btn.voted {
+      background: #10b981;
+      border-color: #10b981;
+    }
+
+    .watched-btn {
+      padding: 10px 15px;
+      background: #f59e0b;
+      border: none;
+      font-size: 14px;
+    }
+
+    .watched-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #f59e0b;
+      color: white;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.9em;
+    }
+
+    .winner-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: gold;
+      color: #333;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.9em;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 15px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal h2 {
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    .search-box {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .search-box input {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #667eea;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    .search-results {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .search-result {
+      display: flex;
+      gap: 15px;
+      padding: 15px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .search-result:hover {
+      border-color: #667eea;
+      background: #f3f4f6;
+    }
+
+    .search-poster {
+      width: 80px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 5px;
+      background: #e5e7eb;
+    }
+
+    .search-info {
+      flex: 1;
+    }
+
+    .search-title {
+      font-weight: 700;
+      font-size: 1.1em;
+      margin-bottom: 5px;
+    }
+
+    .search-year {
+      color: #666;
+      font-size: 0.9em;
+    }
+
+    .close-modal {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: none;
+      border: none;
+      font-size: 30px;
+      color: #666;
+      cursor: pointer;
+      padding: 0;
+      width: 40px;
+      height: 40px;
+    }
+
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: white;
+      font-size: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🍿 Movie Night</h1>
+    
+    <div class="header">
+      <div class="user-select">
+        <label for="user">Who are you?</label>
+        <select id="user">
+          <option value="">Select your name</option>
+          <option value="Erik">Erik</option>
+          <option value="Timea">Timea</option>
+          <option value="Jázmin">Jázmin</option>
+          <option value="Niki">Niki</option>
+        </select>
+      </div>
+      
+      <div class="actions">
+        <button id="proposeBtn" disabled>📽️ Propose Movie</button>
+        <button id="pickTonightBtn" disabled>🏆 Pick Tonight</button>
+      </div>
+    </div>
+
+    <div id="moviesContainer" class="movies-grid"></div>
+    <div id="emptyState" class="empty-state">
+      No movies proposed yet. Be the first! 🎬
+    </div>
+  </div>
+
+  <div id="searchModal" class="modal">
+    <div class="modal-content">
+      <button class="close-modal" onclick="closeModal()">&times;</button>
+      <h2>Search for a movie</h2>
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Enter movie title..." />
+        <button onclick="searchMovies()">Search</button>
+      </div>
+      <div id="errorMsg"></div>
+      <div id="searchResults" class="search-results"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = '';
+    let movies = [];
+
+    document.getElementById('user').addEventListener('change', (e) => {
+      currentUser = e.target.value;
+      document.getElementById('proposeBtn').disabled = !currentUser;
+      document.getElementById('pickTonightBtn').disabled = !currentUser;
+      loadMovies();
+    });
+
+    document.getElementById('proposeBtn').addEventListener('click', () => {
+      document.getElementById('searchModal').classList.add('active');
+    });
+
+    document.getElementById('pickTonightBtn').addEventListener('click', pickTonight);
+
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') searchMovies();
+    });
+
+    function closeModal() {
+      document.getElementById('searchModal').classList.remove('active');
+      document.getElementById('searchInput').value = '';
+      document.getElementById('searchResults').innerHTML = '';
+      document.getElementById('errorMsg').innerHTML = '';
+    }
+
+    async function loadMovies() {
+      const response = await fetch('/api/movies');
+      movies = await response.json();
+      renderMovies();
+    }
+
+    function renderMovies() {
+      const container = document.getElementById('moviesContainer');
+      const emptyState = document.getElementById('emptyState');
+      
+      if (movies.length === 0) {
+        container.style.display = 'none';
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      container.style.display = 'grid';
+      emptyState.style.display = 'none';
+      
+      // Sort by vote count (unwatched first)
+      const sortedMovies = [...movies].sort((a, b) => {
+        if (a.watched !== b.watched) return a.watched ? 1 : -1;
+        const votesA = Object.values(a.votes).filter(v => v).length;
+        const votesB = Object.values(b.votes).filter(v => v).length;
+        return votesB - votesA;
+      });
+
+      // Find winner (highest voted unwatched)
+      const unwatched = sortedMovies.filter(m => !m.watched);
+      const winner = unwatched[0];
+
+      container.innerHTML = sortedMovies.map(movie => {
+        const voteCount = Object.values(movie.votes).filter(v => v).length;
+        const userVoted = currentUser && movie.votes[currentUser];
+        const isProposer = currentUser && movie.proposedBy === currentUser;
+        const posterUrl = movie.imdbId 
+          ? `https://api.ratingposterdb.com/${movie.imdbId}/poster-default.jpg`
+          : `https://image.tmdb.org/t/p/w500${movie.posterPath || ''}`;
+        
+        return `
+          <div class="movie-card ${movie.watched ? 'watched' : ''} ${winner && winner.id === movie.id ? 'winner' : ''}">
+            ${movie.watched ? '<div class="watched-badge">WATCHED</div>' : ''}
+            ${winner && winner.id === movie.id && !movie.watched ? '<div class="winner-badge">🏆 WINNER</div>' : ''}
+            <img class="poster" src="${posterUrl}" alt="${movie.title}" onerror="this.src='https://via.placeholder.com/250x375?text=${encodeURIComponent(movie.title)}'">
+            <div class="movie-info">
+              <div class="movie-title">${movie.title}</div>
+              <div class="movie-year">${movie.year}</div>
+              <div class="proposer">Proposed by ${movie.proposedBy}</div>
+              <div class="movie-actions">
+                <button 
+                  class="vote-btn ${userVoted ? 'voted' : ''}" 
+                  onclick="toggleVote('${movie.id}')"
+                  ${!currentUser || isProposer ? 'disabled' : ''}
+                >
+                  ${userVoted ? '❤️' : '🤍'} ${voteCount}
+                </button>
+                ${currentUser ? `
+                  <button class="watched-btn" onclick="toggleWatched('${movie.id}')">
+                    ${movie.watched ? '↩️' : '✓'}
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function searchMovies() {
+      const query = document.getElementById('searchInput').value.trim();
+      if (!query) return;
+
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.innerHTML = '';
+
+      const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
+      const results = await response.json();
+
+      if (results.error) {
+        errorMsg.innerHTML = `<div class="error">${results.error}</div>`;
+        return;
+      }
+
+      const container = document.getElementById('searchResults');
+      container.innerHTML = results.slice(0, 10).map(movie => {
+        const year = movie.release_date ? movie.release_date.split('-')[0] : 'N/A';
+        const posterUrl = movie.poster_path 
+          ? `https://image.tmdb.org/t/p/w200${movie.poster_path}`
+          : 'https://via.placeholder.com/80x120?text=No+Poster';
+        
+        return `
+          <div class="search-result" onclick='proposeMovie(${JSON.stringify({
+            tmdbId: movie.id,
+            title: movie.title,
+            year: year,
+            imdbId: null,
+            posterPath: movie.poster_path
+          })})'>
+            <img class="search-poster" src="${posterUrl}" alt="${movie.title}">
+            <div class="search-info">
+              <div class="search-title">${movie.title}</div>
+              <div class="search-year">${year}</div>
+              <div>${movie.overview ? movie.overview.substring(0, 150) + '...' : ''}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function proposeMovie(movie) {
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.innerHTML = '';
+
+      const response = await fetch('/api/propose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...movie, proposedBy: currentUser })
+      });
+
+      const result = await response.json();
+      
+      if (result.error) {
+        errorMsg.innerHTML = `<div class="error">${result.error}</div>`;
+        return;
+      }
+
+      closeModal();
+      loadMovies();
+    }
+
+    async function toggleVote(movieId) {
+      if (!currentUser) return;
+
+      await fetch('/api/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movieId, user: currentUser })
+      });
+
+      loadMovies();
+    }
+
+    async function toggleWatched(movieId) {
+      await fetch('/api/watched', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movieId })
+      });
+
+      loadMovies();
+    }
+
+    function pickTonight() {
+      const unwatched = movies.filter(m => !m.watched);
+      if (unwatched.length === 0) {
+        alert('No unwatched movies! Propose some first 🎬');
+        return;
+      }
+
+      const sorted = unwatched.sort((a, b) => {
+        const votesA = Object.values(a.votes).filter(v => v).length;
+        const votesB = Object.values(b.votes).filter(v => v).length;
+        return votesB - votesA;
+      });
+
+      const winner = sorted[0];
+      const voteCount = Object.values(winner.votes).filter(v => v).length;
+      
+      alert(`🏆 Tonight's winner:\n\n${winner.title} (${winner.year})\n\nProposed by ${winner.proposedBy}\nVotes: ${voteCount}`);
+      
+      // Scroll to winner
+      renderMovies();
+    }
+
+    loadMovies();
+  </script>
+</body>
+</html>
