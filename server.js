@@ -65,7 +65,15 @@ const writeData = (data) => fs.writeFileSync(DATA_FILE, JSON.stringify(data, nul
 
 // Initialize or migrate data file
 const initData = () => {
-  if (!fs.existsSync(DATA_FILE)) {
+  // Ensure data directory exists
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  
+  // Check if data file exists and is actually a file (not a directory)
+  const fileExists = fs.existsSync(DATA_FILE) && fs.statSync(DATA_FILE).isFile();
+  
+  if (!fileExists) {
     const initialData = {
       users: {
         'Erik': { icon: '👨‍💼', pin: null },
