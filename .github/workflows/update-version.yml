@@ -1,0 +1,51 @@
+name: Auto-update K8s version on code changes
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'server.js'
+      - 'public/**'
+      - 'package.json'
+      - '.env.example'
+      - 'Dockerfile'
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    # Don't run if commit message contains [skip-version]
+    if: "!contains(github.event.head_commit.message, '[skip-version]')"
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Update version annotation
+        run: |
+          # Use short SHA + timestamp for uniqueness
+          VERSION="${GITHUB_SHA:0:7}-$(date +%s)"
+          echo "Updating version to: $VERSION"
+          
+          # Update the version annotation in deployment.yaml
+          sed -i "s/version: \".*\"/version: \"$VERSION\"/" k8s/deployment.yaml
+          
+          # Show the diff
+          git diff k8s/deployment.yaml
+          
+      - name: Commit and push changes
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          # Only commit if there are changes
+          if git diff --quiet k8s/deployment.yaml; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git add k8s/deployment.yaml
+          git commit -m "chore: bump k8s version for app update [skip-version]"
+          git push
