@@ -115,6 +115,42 @@ const initData = () => {
 
 initData();
 
+// MDBList integration helper
+const addToMDBList = async (tmdbId, imdbId, title) => {
+  if (!process.env.MDBLIST_API_KEY || !process.env.MDBLIST_LIST_ID) {
+    console.log('MDBList not configured - skipping');
+    return false;
+  }
+
+  try {
+    const movieId = imdbId || `tmdb:${tmdbId}`;
+    const url = `https://api.mdblist.com/lists/${process.env.MDBLIST_LIST_ID}/items`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': process.env.MDBLIST_API_KEY
+      },
+      body: JSON.stringify({
+        items: [movieId]
+      })
+    });
+
+    if (response.ok) {
+      console.log(`✅ Added to MDBList: ${title} (${movieId})`);
+      return true;
+    } else {
+      const error = await response.text();
+      console.error(`❌ MDBList error for ${title}:`, error);
+      return false;
+    }
+  } catch (error) {
+    console.error('MDBList API error:', error);
+    return false;
+  }
+};
+
 // Check and update phase/week
 const checkAndUpdatePhase = (data) => {
   const currentWeek = getWeekNumber();
@@ -131,6 +167,14 @@ const checkAndUpdatePhase = (data) => {
       });
       
       const sorted = nominations.sort((a, b) => voteCounts[b.id] - voteCounts[a.id]);
+      
+      // Add winning movies to MDBList
+      if (sorted[0]) {
+        addToMDBList(sorted[0].tmdbId, sorted[0].imdbId, sorted[0].title);
+      }
+      if (sorted[1]) {
+        addToMDBList(sorted[1].tmdbId, sorted[1].imdbId, sorted[1].title);
+      }
       
       data.history.unshift({
         weekNumber: data.currentWeek.weekNumber,
@@ -564,6 +608,34 @@ app.post('/api/login', (req, res) => {
   });
 });
 
+// Manually add a movie to MDBList
+app.post('/api/mdblist/add', async (req, res) => {
+  const { tmdbId, imdbId, title } = req.body;
+  
+  if (!tmdbId && !imdbId) {
+    return res.status(400).json({ error: 'Missing tmdbId or imdbId' });
+  }
+  
+  const success = await addToMDBList(tmdbId, imdbId, title || 'Unknown');
+  
+  if (success) {
+    res.json({ success: true, message: 'Added to MDBList' });
+  } else {
+    res.status(500).json({ error: 'Failed to add to MDBList' });
+  }
+});
+
+// Get MDBList configuration status
+app.get('/api/mdblist/status', (req, res) => {
+  res.json({
+    configured: !!(process.env.MDBLIST_API_KEY && process.env.MDBLIST_LIST_ID),
+    listId: process.env.MDBLIST_LIST_ID ? process.env.MDBLIST_LIST_ID.substring(0, 8) + '...' : null
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`Movie Night app running on http://localhost:${PORT}`);
+  if (process.env.MDBLIST_API_KEY && process.env.MDBLIST_LIST_ID) {
+    console.log(`✅ MDBList integration enabled (List: ${process.env.MDBLIST_LIST_ID})`);
+  }
 });
