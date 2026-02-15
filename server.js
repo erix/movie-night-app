@@ -172,6 +172,22 @@ app.get('/api/browse/:category', async (req, res) => {
     return res.status(500).json({ error: 'TMDb API key not configured' });
   }
   
+  // Genre IDs from TMDb
+  const genreIds = {
+    action: 28,
+    comedy: 35,
+    crime: 80,
+    drama: 18,
+    thriller: 53,
+    horror: 27,
+    romance: 10749,
+    scifi: 878,
+    fantasy: 14,
+    animation: 16,
+    family: 10751,
+    mystery: 9648
+  };
+  
   const endpoints = {
     trending: '/trending/movie/week',
     popular: '/movie/popular',
@@ -180,15 +196,17 @@ app.get('/api/browse/:category', async (req, res) => {
     upcoming: '/movie/upcoming'
   };
   
-  const endpoint = endpoints[category];
-  if (!endpoint) {
+  let url = '';
+  if (endpoints[category]) {
+    url = `https://api.themoviedb.org/3${endpoints[category]}?api_key=${process.env.TMDB_API_KEY}`;
+  } else if (genreIds[category]) {
+    url = `https://api.themoviedb.org/3/discover/movie?api_key=${process.env.TMDB_API_KEY}&with_genres=${genreIds[category]}&sort_by=popularity.desc`;
+  } else {
     return res.status(400).json({ error: 'Invalid category' });
   }
   
   try {
-    const response = await fetch(
-      `https://api.themoviedb.org/3${endpoint}?api_key=${process.env.TMDB_API_KEY}`
-    );
+    const response = await fetch(url);
     const data = await response.json();
     res.json(data.results || []);
   } catch (error) {

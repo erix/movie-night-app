@@ -237,6 +237,34 @@
       margin-bottom: 40px;
     }
 
+    .search-container {
+      margin-bottom: 30px;
+      max-width: 600px;
+    }
+
+    .search-input-wrapper {
+      display: flex;
+      gap: 10px;
+    }
+
+    .search-input {
+      flex: 1;
+      padding: 12px 20px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 4px;
+      color: white;
+      font-size: 16px;
+    }
+
+    .search-input::placeholder {
+      color: rgba(255,255,255,0.5);
+    }
+
+    .search-btn {
+      padding: 12px 30px;
+    }
+
     .browse-row {
       margin-bottom: 30px;
     }
@@ -711,13 +739,35 @@
         message = '<div class="waiting-message">Nominations open Monday. Browse and plan ahead!</div>';
       }
       
-      section.innerHTML = `<div class="section-title">${title}</div>${message}`;
+      section.innerHTML = `
+        <div class="section-title">${title}</div>
+        ${message}
+        <div class="search-container">
+          <div class="search-input-wrapper">
+            <input type="text" class="search-input" id="movieSearch" placeholder="Search movies by title..." onkeypress="if(event.key==='Enter') searchMovies()">
+            <button class="search-btn" onclick="searchMovies()">Search</button>
+          </div>
+        </div>
+        <div id="searchResults"></div>
+      `;
       
       const categories = [
-        { id: 'trending', name: 'Trending Now' },
-        { id: 'popular', name: 'Popular' },
-        { id: 'topRated', name: 'Top Rated' },
-        { id: 'nowPlaying', name: 'In Theaters' }
+        { id: 'trending', name: '🔥 Trending Now' },
+        { id: 'popular', name: '⭐ Popular' },
+        { id: 'topRated', name: '🏆 Top Rated' },
+        { id: 'nowPlaying', name: '🎬 In Theaters' },
+        { id: 'action', name: '💥 Action' },
+        { id: 'comedy', name: '😂 Comedy' },
+        { id: 'thriller', name: '😱 Thriller' },
+        { id: 'crime', name: '🔫 Crime' },
+        { id: 'drama', name: '🎭 Drama' },
+        { id: 'romance', name: '💕 Romance' },
+        { id: 'horror', name: '👻 Horror' },
+        { id: 'scifi', name: '🚀 Sci-Fi' },
+        { id: 'fantasy', name: '🧙 Fantasy' },
+        { id: 'animation', name: '🎨 Animation' },
+        { id: 'family', name: '👨‍👩‍👧‍👦 Family' },
+        { id: 'mystery', name: '🔍 Mystery' }
       ];
       
       for (const cat of categories) {
@@ -728,22 +778,55 @@
           <div class="browse-row">
             <div class="row-title">${cat.name}</div>
             <div class="movies-scroll">
-              ${movies.slice(0, 20).map(movie => `
-                <div class="movie-card" onclick="showMovieDetail(${movie.id})">
-                  <img class="movie-backdrop" src="https://image.tmdb.org/t/p/w500${movie.backdrop_path || movie.poster_path || ''}" alt="${movie.title}" onerror="this.src='https://via.placeholder.com/300x170?text=${encodeURIComponent(movie.title)}'">
-                  <div class="movie-info">
-                    <div class="movie-title">${movie.title}</div>
-                    <div class="movie-meta">
-                      <span class="rating">⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}</span>
-                      <span>${movie.release_date ? movie.release_date.split('-')[0] : ''}</span>
-                    </div>
-                  </div>
-                </div>
-              `).join('')}
+              ${movies.slice(0, 20).map(movie => renderMovieCard(movie)).join('')}
             </div>
           </div>
         `;
       }
+    }
+    
+    // Render movie card (reusable)
+    function renderMovieCard(movie) {
+      return `
+        <div class="movie-card" onclick="showMovieDetail(${movie.id})">
+          <img class="movie-backdrop" src="https://image.tmdb.org/t/p/w500${movie.backdrop_path || movie.poster_path || ''}" alt="${movie.title}" onerror="this.src='https://via.placeholder.com/300x170?text=${encodeURIComponent(movie.title)}'">
+          <div class="movie-info">
+            <div class="movie-title">${movie.title}</div>
+            <div class="movie-meta">
+              <span class="rating">⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}</span>
+              <span>${movie.release_date ? movie.release_date.split('-')[0] : ''}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    // Search movies
+    async function searchMovies() {
+      const query = document.getElementById('movieSearch').value.trim();
+      const resultsDiv = document.getElementById('searchResults');
+      
+      if (!query) {
+        resultsDiv.innerHTML = '';
+        return;
+      }
+      
+      const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
+      const movies = await response.json();
+      
+      if (movies.length === 0) {
+        resultsDiv.innerHTML = '<div class="waiting-message">No results found</div>';
+        return;
+      }
+      
+      resultsDiv.innerHTML = `
+        <div class="browse-row">
+          <div class="row-title">🔍 Search Results for "${query}"</div>
+          <div class="movies-scroll">
+            ${movies.slice(0, 20).map(movie => renderMovieCard(movie)).join('')}
+          </div>
+        </div>
+      `;
     }
 
     // Show movie detail modal
