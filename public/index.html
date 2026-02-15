@@ -372,12 +372,14 @@
 
     .search-container {
       margin-bottom: 30px;
-      max-width: 600px;
+      max-width: 100%;
+      position: relative;
     }
 
     .search-input-wrapper {
       display: flex;
       gap: 10px;
+      max-width: 600px;
     }
 
     .search-input {
@@ -390,12 +392,89 @@
       font-size: 16px;
     }
 
+    .search-input:focus {
+      outline: none;
+      border-color: #e50914;
+      background: rgba(255,255,255,0.15);
+    }
+
     .search-input::placeholder {
       color: rgba(255,255,255,0.5);
     }
 
     .search-btn {
       padding: 12px 30px;
+    }
+
+    .search-suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 500px;
+      overflow-y: auto;
+      background: #1c1c1c;
+      border-radius: 8px;
+      margin-top: 10px;
+      z-index: 1000;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+      display: none;
+    }
+
+    .search-suggestions.active {
+      display: block;
+    }
+
+    .suggestion-item {
+      display: flex;
+      gap: 15px;
+      padding: 15px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      transition: background 0.3s;
+    }
+
+    .suggestion-item:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .suggestion-item:last-child {
+      border-bottom: none;
+    }
+
+    .suggestion-backdrop {
+      width: 120px;
+      height: 70px;
+      object-fit: cover;
+      border-radius: 4px;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .suggestion-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .suggestion-title {
+      font-size: 1.1em;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .suggestion-meta {
+      display: flex;
+      gap: 15px;
+      color: #999;
+      font-size: 0.9em;
+    }
+
+    .suggestion-loading {
+      padding: 20px;
+      text-align: center;
+      color: #999;
     }
 
     .browse-row {
@@ -684,6 +763,7 @@
     let pinEntry = '';
     let setupMode = false;
     let setupUser = '';
+    let searchTimeout = null;
 
     const availableIcons = [
       '👨‍💼', '👩‍💼', '👨‍🔬', '👩‍🔬', '👨‍🎨', '👩‍🎨',
@@ -1086,12 +1166,16 @@
         ${message}
         <div class="search-container">
           <div class="search-input-wrapper">
-            <input type="text" class="search-input" id="movieSearch" placeholder="Search movies by title..." onkeypress="if(event.key==='Enter') searchMovies()">
-            <button class="search-btn" onclick="searchMovies()">Search</button>
+            <input type="text" class="search-input" id="movieSearch" placeholder="Search movies by title..." autocomplete="off">
+            <button class="search-btn" onclick="clearSearch()">Clear</button>
           </div>
+          <div id="searchSuggestions" class="search-suggestions"></div>
         </div>
         <div id="searchResults"></div>
       `;
+
+      // Initialize search after DOM update
+      setTimeout(() => initSearch(), 100);
       
       const categories = [
         { id: 'trending', name: '🔥 Trending Now' },
@@ -1143,32 +1227,101 @@
       `;
     }
     
-    // Search movies
-    async function searchMovies() {
-      const query = document.getElementById('movieSearch').value.trim();
-      const resultsDiv = document.getElementById('searchResults');
+    // Initialize search input
+    function initSearch() {
+      const searchInput = document.getElementById('movieSearch');
+      if (!searchInput) return;
+
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        
+        // Clear existing timeout
+        if (searchTimeout) {
+          clearTimeout(searchTimeout);
+        }
+
+        // Hide suggestions if empty
+        if (!query) {
+          hideSuggestions();
+          return;
+        }
+
+        // Debounce search (300ms delay)
+        searchTimeout = setTimeout(() => {
+          liveSearch(query);
+        }, 300);
+      });
+
+      // Hide suggestions when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-container')) {
+          hideSuggestions();
+        }
+      });
+    }
+
+    // Live search with autocomplete
+    async function liveSearch(query) {
+      const suggestionsDiv = document.getElementById('searchSuggestions');
       
       if (!query) {
-        resultsDiv.innerHTML = '';
+        hideSuggestions();
         return;
       }
-      
+
+      // Show loading
+      suggestionsDiv.innerHTML = '<div class="suggestion-loading">Searching...</div>';
+      suggestionsDiv.classList.add('active');
+
       const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
       const movies = await response.json();
-      
+
       if (movies.length === 0) {
-        resultsDiv.innerHTML = '<div class="waiting-message">No results found</div>';
+        suggestionsDiv.innerHTML = '<div class="suggestion-loading">No results found</div>';
         return;
       }
-      
-      resultsDiv.innerHTML = `
-        <div class="browse-row">
-          <div class="row-title">🔍 Search Results for "${query}"</div>
-          <div class="movies-scroll">
-            ${movies.slice(0, 20).map(movie => renderMovieCard(movie)).join('')}
+
+      suggestionsDiv.innerHTML = movies.slice(0, 8).map(movie => {
+        const backdropUrl = movie.backdrop_path 
+          ? `https://image.tmdb.org/t/p/w300${movie.backdrop_path}`
+          : (movie.poster_path 
+            ? `https://image.tmdb.org/t/p/w300${movie.poster_path}`
+            : '');
+
+        return `
+          <div class="suggestion-item" onclick="selectSuggestion(${movie.id})">
+            <img class="suggestion-backdrop" src="${backdropUrl}" alt="${movie.title}" onerror="this.src='https://via.placeholder.com/120x70?text=${encodeURIComponent(movie.title.substring(0, 10))}'">
+            <div class="suggestion-info">
+              <div class="suggestion-title">${movie.title}</div>
+              <div class="suggestion-meta">
+                <span class="rating">⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}</span>
+                <span>${movie.release_date ? movie.release_date.split('-')[0] : 'N/A'}</span>
+              </div>
+            </div>
           </div>
-        </div>
-      `;
+        `;
+      }).join('');
+    }
+
+    function hideSuggestions() {
+      const suggestionsDiv = document.getElementById('searchSuggestions');
+      if (suggestionsDiv) {
+        suggestionsDiv.classList.remove('active');
+      }
+    }
+
+    function selectSuggestion(tmdbId) {
+      hideSuggestions();
+      showMovieDetail(tmdbId);
+    }
+
+    function clearSearch() {
+      const searchInput = document.getElementById('movieSearch');
+      if (searchInput) {
+        searchInput.value = '';
+      }
+      hideSuggestions();
+      document.getElementById('searchResults').innerHTML = '';
     }
 
     // Show movie detail modal
