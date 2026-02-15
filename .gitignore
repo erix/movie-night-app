@@ -3,3 +3,8 @@ node_modules/
 data.json
 *.log
 .DS_Store
+
+# Kubernetes secrets (use sealed secrets instead)
+k8s/secret.yaml
+k8s/*-secret.yaml
+!k8s/sealed-secret.yaml
