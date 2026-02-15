@@ -1,6 +1,7 @@
 node_modules/
 .env
 data.json
+data.json.old
 *.log
 .DS_Store
 
