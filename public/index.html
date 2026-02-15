@@ -948,6 +948,7 @@
     let setupMode = false;
     let setupUser = '';
     let searchTimeout = null;
+    let searchInitialized = false;
 
     const availableIcons = [
       '👨‍💼', '👩‍💼', '👨‍🔬', '👩‍🔬', '👨‍🎨', '👩‍🎨',
@@ -1437,7 +1438,19 @@
     // Initialize search input
     function initSearch() {
       const searchInput = document.getElementById('movieSearch');
-      if (!searchInput) return;
+      if (!searchInput) {
+        console.log('Search input not found, retrying...');
+        setTimeout(() => initSearch(), 200);
+        return;
+      }
+
+      // Prevent duplicate initialization
+      if (searchInput.dataset.initialized === 'true') {
+        console.log('Search already initialized');
+        return;
+      }
+
+      searchInput.dataset.initialized = 'true';
 
       searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
@@ -1459,12 +1472,25 @@
         }, 300);
       });
 
-      // Hide suggestions when clicking outside
-      document.addEventListener('click', (e) => {
-        if (!e.target.closest('.search-container')) {
-          hideSuggestions();
+      searchInput.addEventListener('focus', () => {
+        // Show suggestions if there's already text
+        const query = searchInput.value.trim();
+        if (query) {
+          liveSearch(query);
         }
       });
+
+      // Add global click handler only once
+      if (!searchInitialized) {
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('.search-container')) {
+            hideSuggestions();
+          }
+        });
+        searchInitialized = true;
+      }
+
+      console.log('Search initialized successfully');
     }
 
     // Live search with autocomplete
@@ -1493,13 +1519,15 @@
           ? `https://image.tmdb.org/t/p/w300${movie.backdrop_path}`
           : (movie.poster_path 
             ? `https://image.tmdb.org/t/p/w300${movie.poster_path}`
-            : '');
+            : 'https://via.placeholder.com/120x70?text=No+Image');
+        
+        const titleSafe = (movie.title || 'Unknown').replace(/'/g, '&apos;').replace(/"/g, '&quot;');
 
         return `
           <div class="suggestion-item" onclick="selectSuggestion(${movie.id})">
-            <img class="suggestion-backdrop" src="${backdropUrl}" alt="${movie.title}" onerror="this.src='https://via.placeholder.com/120x70?text=${encodeURIComponent(movie.title.substring(0, 10))}'">
+            <img class="suggestion-backdrop" src="${backdropUrl}" alt="${titleSafe}" onerror="this.src='https://via.placeholder.com/120x70?text=No+Image'">
             <div class="suggestion-info">
-              <div class="suggestion-title">${movie.title}</div>
+              <div class="suggestion-title">${titleSafe}</div>
               <div class="suggestion-meta">
                 <span class="rating">⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}</span>
                 <span>${movie.release_date ? movie.release_date.split('-')[0] : 'N/A'}</span>
