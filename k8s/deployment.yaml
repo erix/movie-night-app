@@ -67,13 +67,11 @@ spec:
             secretKeyRef:
               name: movie-night-secrets
               key: mdblist-api-key
-              optional: true
         - name: MDBLIST_LIST_ID
           valueFrom:
             secretKeyRef:
               name: movie-night-secrets
               key: mdblist-list-id
-              optional: true
         - name: DATA_DIR
           value: "/data"
         volumeMounts:
