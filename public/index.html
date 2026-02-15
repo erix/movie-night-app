@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Movie Night 🍿</title>
+  <title>Movie Night 🎬</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -42,33 +42,46 @@
     }
 
     h1 {
-      font-family: 'Bebas Neue', 'Impact', 'Arial Black', sans-serif;
-      font-size: 3.5em;
+      font-family: 'Cinzel', serif;
+      font-size: 2.8em;
       font-weight: 700;
-      letter-spacing: 4px;
-      background: linear-gradient(135deg, #ff6b6b 0%, #e50914 50%, #c41e3a 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      text-shadow: none;
-      filter: drop-shadow(0 4px 8px rgba(229, 9, 20, 0.6)) drop-shadow(0 0 30px rgba(229, 9, 20, 0.3));
+      letter-spacing: 3px;
+      color: #f5f5f5;
+      text-transform: uppercase;
       position: relative;
       display: inline-block;
       margin: 0;
+      text-shadow: 
+        0 1px 0 #ccc,
+        0 2px 0 #c9c9c9,
+        0 3px 0 #bbb,
+        0 4px 0 #b9b9b9,
+        0 5px 0 #aaa,
+        0 6px 1px rgba(0,0,0,.1),
+        0 0 5px rgba(0,0,0,.1),
+        0 1px 3px rgba(0,0,0,.3),
+        0 3px 5px rgba(0,0,0,.2),
+        0 5px 10px rgba(0,0,0,.25),
+        0 10px 20px rgba(0,0,0,.2);
     }
 
     h1::before {
-      content: '🍿 MOVIE NIGHT';
+      content: '🎬 ';
+      font-size: 0.9em;
+      margin-right: 8px;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    }
+
+    h1::after {
+      content: '';
       position: absolute;
-      left: 0;
-      top: 0;
-      background: linear-gradient(135deg, #ff6b6b 0%, #e50914 50%, #c41e3a 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      filter: blur(8px);
-      opacity: 0.4;
-      z-index: -1;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #e50914, transparent);
+      box-shadow: 0 0 10px rgba(229, 9, 20, 0.5);
     }
 
     .user-select {
@@ -736,12 +749,16 @@
       }
 
       h1 {
-        font-size: 2.5em;
+        font-size: 2em;
         letter-spacing: 2px;
       }
 
       h1::before {
-        content: '🍿 MOVIE NIGHT';
+        font-size: 0.85em;
+      }
+
+      h1::after {
+        width: 80%;
       }
 
       .nominations-grid {
@@ -933,7 +950,7 @@
 <body>
   <div class="header">
     <div class="header-content">
-      <h1>🍿 Movie Night</h1>
+      <h1>Movie Night</h1>
       <div class="user-select" id="userInfo" style="display:none;">
         <span id="userIcon" class="user-icon" onclick="openIconPicker()" title="Click to change icon"></span>
         <span id="userName" style="font-size:1.2em; font-weight:600;"></span>
