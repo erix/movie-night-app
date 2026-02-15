@@ -67,10 +67,10 @@ const initData = () => {
   if (!fs.existsSync(DATA_FILE)) {
     const initialData = {
       users: {
-        'Erik': { icon: '👨‍💼' },
-        'Timea': { icon: '👩‍🦰' },
-        'Jázmin': { icon: '👧' },
-        'Niki': { icon: '🧒' }
+        'Erik': { icon: '👨‍💼', pin: null },
+        'Timea': { icon: '👩‍🦰', pin: null },
+        'Jázmin': { icon: '👧', pin: null },
+        'Niki': { icon: '🧒', pin: null }
       },
       currentWeek: {
         weekNumber: getWeekNumber(),
@@ -87,13 +87,20 @@ const initData = () => {
     const data = readData();
     if (!data.users) {
       data.users = {
-        'Erik': { icon: '👨‍💼' },
-        'Timea': { icon: '👩‍🦰' },
-        'Jázmin': { icon: '👧' },
-        'Niki': { icon: '🧒' }
+        'Erik': { icon: '👨‍💼', pin: null },
+        'Timea': { icon: '👩‍🦰', pin: null },
+        'Jázmin': { icon: '👧', pin: null },
+        'Niki': { icon: '🧒', pin: null }
       };
       writeData(data);
     }
+    // Add pin field to existing users if missing
+    Object.keys(data.users).forEach(user => {
+      if (!('pin' in data.users[user])) {
+        data.users[user].pin = null;
+      }
+    });
+    writeData(data);
   }
 };
 
@@ -408,6 +415,61 @@ app.post('/api/user/icon', (req, res) => {
   writeData(data);
   
   res.json({ success: true, icon });
+});
+
+// Set user PIN
+app.post('/api/user/pin', (req, res) => {
+  const { user, pin } = req.body;
+  
+  if (!user || !pin) {
+    return res.status(400).json({ error: 'Missing user or PIN' });
+  }
+  
+  // PIN must be 4 digits
+  if (!/^\d{4}$/.test(pin)) {
+    return res.status(400).json({ error: 'PIN must be 4 digits' });
+  }
+  
+  const data = readData();
+  
+  // Check if PIN already used by another user
+  const existingUser = Object.keys(data.users).find(u => u !== user && data.users[u].pin === pin);
+  if (existingUser) {
+    return res.status(400).json({ error: 'PIN already in use' });
+  }
+  
+  if (!data.users[user]) {
+    data.users[user] = { icon: '👤' };
+  }
+  
+  data.users[user].pin = pin;
+  writeData(data);
+  
+  res.json({ success: true });
+});
+
+// Login with PIN
+app.post('/api/login', (req, res) => {
+  const { pin } = req.body;
+  
+  if (!pin) {
+    return res.status(400).json({ error: 'Missing PIN' });
+  }
+  
+  const data = readData();
+  
+  // Find user with this PIN
+  const user = Object.keys(data.users).find(u => data.users[u].pin === pin);
+  
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid PIN' });
+  }
+  
+  res.json({ 
+    success: true, 
+    user,
+    icon: data.users[user].icon
+  });
 });
 
 app.listen(PORT, () => {

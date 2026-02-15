@@ -89,6 +89,100 @@
       margin-right: 5px;
     }
 
+    /* PIN Login */
+    .pin-container {
+      text-align: center;
+    }
+
+    .pin-display {
+      font-size: 3em;
+      letter-spacing: 20px;
+      margin: 20px 0;
+      font-family: monospace;
+      min-height: 60px;
+    }
+
+    .pin-pad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+
+    .pin-btn {
+      padding: 20px;
+      font-size: 2em;
+      background: rgba(255,255,255,0.1);
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .pin-btn:hover {
+      background: rgba(255,255,255,0.2);
+      border-color: #e50914;
+    }
+
+    .pin-btn:active {
+      transform: scale(0.95);
+    }
+
+    .pin-btn.wide {
+      grid-column: span 3;
+    }
+
+    .setup-link {
+      margin-top: 30px;
+      color: #e50914;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .setup-link:hover {
+      color: #f40612;
+    }
+
+    .user-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      margin: 20px 0;
+    }
+
+    .user-card {
+      padding: 20px;
+      background: rgba(255,255,255,0.1);
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.3s;
+    }
+
+    .user-card:hover {
+      background: rgba(255,255,255,0.2);
+      border-color: #e50914;
+      transform: scale(1.05);
+    }
+
+    .user-card-icon {
+      font-size: 3em;
+      margin-bottom: 10px;
+    }
+
+    .user-card-name {
+      font-size: 1.3em;
+      font-weight: 600;
+    }
+
+    .error-message {
+      color: #ff4444;
+      margin-top: 15px;
+      font-weight: 600;
+    }
+
     select, button {
       padding: 10px 20px;
       border-radius: 4px;
@@ -545,15 +639,10 @@
   <div class="header">
     <div class="header-content">
       <h1>🍿 Movie Night</h1>
-      <div class="user-select">
+      <div class="user-select" id="userInfo" style="display:none;">
         <span id="userIcon" class="user-icon" onclick="openIconPicker()" title="Click to change icon"></span>
-        <select id="user">
-          <option value="">Select your name</option>
-          <option value="Erik">Erik</option>
-          <option value="Timea">Timea</option>
-          <option value="Jázmin">Jázmin</option>
-          <option value="Niki">Niki</option>
-        </select>
+        <span id="userName" style="font-size:1.2em; font-weight:600;"></span>
+        <button onclick="logout()" style="margin-left:15px;">Logout</button>
       </div>
     </div>
   </div>
@@ -592,6 +681,9 @@
     let history = [];
     let countdown = null;
     let userIcons = {};
+    let pinEntry = '';
+    let setupMode = false;
+    let setupUser = '';
 
     const availableIcons = [
       '👨‍💼', '👩‍💼', '👨‍🔬', '👩‍🔬', '👨‍🎨', '👩‍🎨',
@@ -606,20 +698,166 @@
       '🦄', '🐉', '🦖', '🦕', '🐙', '🦑'
     ];
 
-    // Initialize
-    document.getElementById('user').addEventListener('change', (e) => {
-      currentUser = e.target.value;
-      updateUserIcon();
-      loadState();
-    });
-
-    function updateUserIcon() {
-      const iconElem = document.getElementById('userIcon');
-      if (currentUser && userIcons[currentUser]) {
-        iconElem.textContent = userIcons[currentUser];
-        iconElem.style.display = 'inline-block';
+    // Check for existing session
+    function checkSession() {
+      const savedUser = localStorage.getItem('movieNightUser');
+      if (savedUser) {
+        currentUser = savedUser;
+        updateUserInfo();
+        loadState();
       } else {
-        iconElem.style.display = 'none';
+        showPinLogin();
+      }
+    }
+
+    function updateUserInfo() {
+      document.getElementById('userInfo').style.display = 'flex';
+      document.getElementById('userName').textContent = currentUser;
+      document.getElementById('userIcon').textContent = userIcons[currentUser] || '👤';
+    }
+
+    function logout() {
+      localStorage.removeItem('movieNightUser');
+      currentUser = '';
+      document.getElementById('userInfo').style.display = 'none';
+      showPinLogin();
+    }
+
+    // PIN pad functions
+    function showPinLogin() {
+      document.getElementById('modalTitle').textContent = 'Enter Your PIN';
+      pinEntry = '';
+      setupMode = false;
+      document.getElementById('modalBody').innerHTML = `
+        <div class="pin-container">
+          <div class="pin-display" id="pinDisplay">••••</div>
+          <div class="pin-pad">
+            ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="pin-btn" onclick="addPin('${n}')">${n}</button>`).join('')}
+            <button class="pin-btn" onclick="clearPin()">Clear</button>
+            <button class="pin-btn" onclick="addPin('0')">0</button>
+            <button class="pin-btn" onclick="submitPin()">✓</button>
+          </div>
+          <div id="pinError" class="error-message"></div>
+          <div class="setup-link" onclick="showSetupChoice()">First time? Set up your PIN</div>
+        </div>
+      `;
+      document.querySelector('.close-btn').style.display = 'none';
+      document.getElementById('modal').classList.add('active');
+    }
+
+    function showSetupChoice() {
+      document.getElementById('modalTitle').textContent = 'Choose Your Name';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="pin-container">
+          <p style="margin-bottom:20px;">Select your name to set up your PIN:</p>
+          <div class="user-list">
+            ${Object.keys(state.users || {}).map(user => `
+              <div class="user-card" onclick="startPinSetup('${user}')">
+                <div class="user-card-icon">${state.users[user].icon}</div>
+                <div class="user-card-name">${user}</div>
+                ${state.users[user].pin ? '<div style="color:#4ade80;">✓ PIN set</div>' : '<div style="color:#fbbf24;">No PIN yet</div>'}
+              </div>
+            `).join('')}
+          </div>
+          <div style="margin-top:20px;">
+            <button onclick="showPinLogin()">Back to Login</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function startPinSetup(user) {
+      setupUser = user;
+      setupMode = true;
+      pinEntry = '';
+      document.getElementById('modalTitle').textContent = `Set PIN for ${user}`;
+      document.getElementById('modalBody').innerHTML = `
+        <div class="pin-container">
+          <p style="margin-bottom:10px;">Enter a 4-digit PIN:</p>
+          <div class="pin-display" id="pinDisplay">••••</div>
+          <div class="pin-pad">
+            ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="pin-btn" onclick="addPin('${n}')">${n}</button>`).join('')}
+            <button class="pin-btn" onclick="clearPin()">Clear</button>
+            <button class="pin-btn" onclick="addPin('0')">0</button>
+            <button class="pin-btn" onclick="submitPin()">Set PIN</button>
+          </div>
+          <div id="pinError" class="error-message"></div>
+          <div style="margin-top:20px;">
+            <button onclick="showSetupChoice()">Back</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function addPin(digit) {
+      if (pinEntry.length < 4) {
+        pinEntry += digit;
+        updatePinDisplay();
+      }
+    }
+
+    function clearPin() {
+      pinEntry = '';
+      updatePinDisplay();
+      document.getElementById('pinError').textContent = '';
+    }
+
+    function updatePinDisplay() {
+      const display = document.getElementById('pinDisplay');
+      if (display) {
+        display.textContent = '•'.repeat(pinEntry.length) + '·'.repeat(4 - pinEntry.length);
+      }
+    }
+
+    async function submitPin() {
+      if (pinEntry.length !== 4) {
+        document.getElementById('pinError').textContent = 'PIN must be 4 digits';
+        return;
+      }
+
+      if (setupMode) {
+        // Set PIN for user
+        const response = await fetch('/api/user/pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: setupUser, pin: pinEntry })
+        });
+
+        const result = await response.json();
+
+        if (result.error) {
+          document.getElementById('pinError').textContent = result.error;
+          return;
+        }
+
+        // Auto-login after setup
+        currentUser = setupUser;
+        localStorage.setItem('movieNightUser', currentUser);
+        closeModal();
+        updateUserInfo();
+        loadState();
+      } else {
+        // Login with PIN
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: pinEntry })
+        });
+
+        const result = await response.json();
+
+        if (result.error) {
+          document.getElementById('pinError').textContent = result.error;
+          pinEntry = '';
+          updatePinDisplay();
+          return;
+        }
+
+        currentUser = result.user;
+        localStorage.setItem('movieNightUser', currentUser);
+        closeModal();
+        updateUserInfo();
+        loadState();
       }
     }
 
@@ -639,7 +877,6 @@
     // Open icon picker
     function openIconPicker() {
       if (!currentUser) {
-        alert('Please select your name first');
         return;
       }
 
@@ -653,6 +890,7 @@
           `).join('')}
         </div>
       `;
+      document.querySelector('.close-btn').style.display = 'block';
       document.getElementById('modal').classList.add('active');
     }
 
@@ -935,6 +1173,7 @@
 
     // Show movie detail modal
     async function showMovieDetail(tmdbId) {
+      document.querySelector('.close-btn').style.display = 'block';
       const response = await fetch(`/api/movie/${tmdbId}`);
       const movie = await response.json();
       
@@ -1024,6 +1263,8 @@
 
     // Close modal
     function closeModal() {
+      // Don't allow closing if not logged in (PIN modal)
+      if (!currentUser) return;
       document.getElementById('modal').classList.remove('active');
     }
 
@@ -1091,12 +1332,11 @@
     }
 
     // Initial load
-    loadState();
+    checkSession();
     
-    // Always show browse section placeholder
-    document.getElementById('browseSection').innerHTML = '<div class="waiting-message">Select your name to browse movies</div>';
-    
-    setInterval(loadState, 30000); // Refresh every 30s
+    setInterval(() => {
+      if (currentUser) loadState();
+    }, 30000); // Refresh every 30s if logged in
   </script>
 </body>
 </html>
