@@ -1,4 +1,4 @@
-// Movie Night API Server - Auto-deployed via FluxCD
+// Movie Night API Server - Auto-deployed via FluxCD + GitHub Actions
 require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
