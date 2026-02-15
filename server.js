@@ -58,10 +58,20 @@ const getVotingDeadline = () => {
   return friday.toISOString();
 };
 
+// Helper to read/write data
+const readData = () => JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+const writeData = (data) => fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
 // Initialize or migrate data file
 const initData = () => {
   if (!fs.existsSync(DATA_FILE)) {
     const initialData = {
+      users: {
+        'Erik': { icon: '👨‍💼' },
+        'Timea': { icon: '👩‍🦰' },
+        'Jázmin': { icon: '👧' },
+        'Niki': { icon: '🧒' }
+      },
       currentWeek: {
         weekNumber: getWeekNumber(),
         phase: getCurrentPhase(),
@@ -72,14 +82,22 @@ const initData = () => {
       history: []
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2));
+  } else {
+    // Migrate old data to add users section if missing
+    const data = readData();
+    if (!data.users) {
+      data.users = {
+        'Erik': { icon: '👨‍💼' },
+        'Timea': { icon: '👩‍🦰' },
+        'Jázmin': { icon: '👧' },
+        'Niki': { icon: '🧒' }
+      };
+      writeData(data);
+    }
   }
 };
 
 initData();
-
-// Helper to read/write data
-const readData = () => JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-const writeData = (data) => fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 
 // Check and update phase/week
 const checkAndUpdatePhase = (data) => {
@@ -154,7 +172,8 @@ app.get('/api/state', (req, res) => {
     phase: data.currentWeek.phase,
     votingDeadline: data.currentWeek.votingDeadline,
     nominations: data.currentWeek.nominations,
-    votes: data.currentWeek.votes
+    votes: data.currentWeek.votes,
+    users: data.users || {}
   });
 });
 
@@ -365,6 +384,30 @@ app.get('/api/votes/:user', (req, res) => {
     votes: userVotes,
     count: voteCount
   });
+});
+
+// Update user icon
+app.post('/api/user/icon', (req, res) => {
+  const { user, icon } = req.body;
+  
+  if (!user || !icon) {
+    return res.status(400).json({ error: 'Missing user or icon' });
+  }
+  
+  const data = readData();
+  
+  if (!data.users) {
+    data.users = {};
+  }
+  
+  if (!data.users[user]) {
+    data.users[user] = {};
+  }
+  
+  data.users[user].icon = icon;
+  writeData(data);
+  
+  res.json({ success: true, icon });
 });
 
 app.listen(PORT, () => {

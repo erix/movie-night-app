@@ -50,6 +50,45 @@
       align-items: center;
     }
 
+    .user-icon {
+      font-size: 1.5em;
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+
+    .user-icon:hover {
+      transform: scale(1.2);
+    }
+
+    .icon-picker {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .icon-option {
+      font-size: 2em;
+      padding: 15px;
+      background: rgba(255,255,255,0.1);
+      border: 2px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.3s;
+    }
+
+    .icon-option:hover {
+      background: rgba(255,255,255,0.2);
+      border-color: #e50914;
+      transform: scale(1.1);
+    }
+
+    .proposer-icon {
+      font-size: 1.2em;
+      margin-right: 5px;
+    }
+
     select, button {
       padding: 10px 20px;
       border-radius: 4px;
@@ -507,6 +546,7 @@
     <div class="header-content">
       <h1>🍿 Movie Night</h1>
       <div class="user-select">
+        <span id="userIcon" class="user-icon" onclick="openIconPicker()" title="Click to change icon"></span>
         <select id="user">
           <option value="">Select your name</option>
           <option value="Erik">Erik</option>
@@ -551,21 +591,83 @@
     let state = null;
     let history = [];
     let countdown = null;
+    let userIcons = {};
+
+    const availableIcons = [
+      '👨‍💼', '👩‍💼', '👨‍🔬', '👩‍🔬', '👨‍🎨', '👩‍🎨',
+      '👨‍🍳', '👩‍🍳', '👨‍🎓', '👩‍🎓', '👨‍⚕️', '👩‍⚕️',
+      '🧔', '👩‍🦰', '👨‍🦱', '👩‍🦱', '👧', '🧒',
+      '😎', '🤓', '🥸', '🤠', '🥳', '🤩',
+      '🦸‍♂️', '🦸‍♀️', '🦹‍♂️', '🦹‍♀️', '🧙‍♂️', '🧙‍♀️',
+      '🧚‍♂️', '🧚‍♀️', '🧛‍♂️', '🧛‍♀️', '🧜‍♂️', '🧜‍♀️',
+      '🎭', '🎪', '🎨', '🎬', '🎮', '🎯',
+      '⚡', '🔥', '⭐', '✨', '💫', '🌟',
+      '🦊', '🦁', '🐯', '🐻', '🐼', '🐨',
+      '🦄', '🐉', '🦖', '🦕', '🐙', '🦑'
+    ];
 
     // Initialize
     document.getElementById('user').addEventListener('change', (e) => {
       currentUser = e.target.value;
+      updateUserIcon();
       loadState();
     });
+
+    function updateUserIcon() {
+      const iconElem = document.getElementById('userIcon');
+      if (currentUser && userIcons[currentUser]) {
+        iconElem.textContent = userIcons[currentUser];
+        iconElem.style.display = 'inline-block';
+      } else {
+        iconElem.style.display = 'none';
+      }
+    }
 
     // Load current state
     async function loadState() {
       const response = await fetch('/api/state');
       state = await response.json();
+      userIcons = state.users || {};
+      updateUserIcon();
       renderPhase();
       renderNominations();
       if (currentUser) {
         loadBrowse();
+      }
+    }
+
+    // Open icon picker
+    function openIconPicker() {
+      if (!currentUser) {
+        alert('Please select your name first');
+        return;
+      }
+
+      document.getElementById('modalTitle').textContent = 'Choose Your Icon';
+      document.getElementById('modalBody').innerHTML = `
+        <div class="icon-picker">
+          ${availableIcons.map(icon => `
+            <div class="icon-option" onclick="selectIcon('${icon}')">
+              ${icon}
+            </div>
+          `).join('')}
+        </div>
+      `;
+      document.getElementById('modal').classList.add('active');
+    }
+
+    // Select icon
+    async function selectIcon(icon) {
+      const response = await fetch('/api/user/icon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: currentUser, icon })
+      });
+
+      if (response.ok) {
+        userIcons[currentUser] = icon;
+        updateUserIcon();
+        closeModal();
       }
     }
 
@@ -693,7 +795,9 @@
                   <div class="nomination-meta">
                     <span class="rating">⭐ ${nom.rating ? nom.rating.toFixed(1) : 'N/A'}</span>
                     <span>${nom.year}</span>
-                    <span class="proposer">${nom.proposedBy}</span>
+                    <span class="proposer">
+                      <span class="proposer-icon">${userIcons[nom.proposedBy] || ''}</span>${nom.proposedBy}
+                    </span>
                   </div>
                   ${state.phase === 'voting' && currentUser ? `
                     <div class="vote-section">
@@ -971,7 +1075,9 @@
                       <div class="nomination-meta">
                         <span class="rating">⭐ ${movie.rating ? movie.rating.toFixed(1) : 'N/A'}</span>
                         <span>${movie.year}</span>
-                        <span class="proposer">${movie.proposedBy}</span>
+                        <span class="proposer">
+                          <span class="proposer-icon">${userIcons[movie.proposedBy] || ''}</span>${movie.proposedBy}
+                        </span>
                       </div>
                       <div class="vote-count">${voteCount} votes</div>
                     </div>
