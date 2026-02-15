@@ -1,18 +1,46 @@
-# 🍿 Movie Night Voting App
+# 🍿 Movie Night - Weekly Voting System
 
-A simple family movie voting system where everyone can propose movies and vote on what to watch.
+A Netflix-inspired family movie voting app with weekly phases, cinematic UI, and automatic scheduling.
 
-## Features
+## ✨ Features
 
-- **4 Users**: Erik, Timea, Jázmin, Niki
-- **Movie Search**: Search TMDb database for movies
-- **Proposal Limits**: Each person can propose 1 movie per week
-- **Voting System**: Upvote others' suggestions (can't vote on your own)
-- **Watched Tracking**: Mark movies as watched (grayed out but still visible)
-- **Pick Tonight**: Shows the highest-voted unwatched movie
-- **Beautiful UI**: Movie posters from RPDB, clean card layout
+### Weekly Phase System
+- **Monday-Wednesday: Nomination Phase** 🎬
+  - Each person nominates 1 movie
+  - Auto-advances when all 4 nominate
+  - Browse trending, popular, and top-rated movies
+  
+- **Thursday-Friday noon: Voting Phase** 🗳️
+  - Everyone votes for their top 2 picks
+  - Can't vote for own nomination
+  - Live countdown timer to deadline
+  
+- **Friday evening-Sunday: Results Phase** 🏆
+  - 🥇 1st place = Friday movie
+  - 🥈 2nd place = Saturday movie
+  - Special gold/silver styling
 
-## Setup
+- **Auto-reset every Monday** - Previous weeks archived
+
+### Netflix-Style UI
+- Horizontal scrolling movie rows
+- Big cinematic 16:9 banners
+- TMDb ratings & metadata
+- Smooth hover animations
+- Dark theme optimized for viewing
+
+### Browse & Discovery
+- **Trending Now** - Hot movies this week
+- **Popular** - All-time favorites
+- **Top Rated** - Critically acclaimed
+- **In Theaters** - Current releases
+
+### Previous Weeks Archive
+- View past winners & votes
+- Week-by-week history
+- Keep track of what you've watched
+
+## 🚀 Setup
 
 1. **Install dependencies**:
    ```bash
@@ -21,7 +49,7 @@ A simple family movie voting system where everyone can propose movies and vote o
 
 2. **Get a TMDb API key**:
    - Go to https://www.themoviedb.org/settings/api
-   - Sign up for a free account
+   - Sign up for free account
    - Copy your API key
 
 3. **Create .env file**:
@@ -32,6 +60,7 @@ A simple family movie voting system where everyone can propose movies and vote o
 4. **Add your TMDb API key** to `.env`:
    ```
    TMDB_API_KEY=your_actual_key_here
+   PORT=3000
    ```
 
 5. **Start the server**:
@@ -39,7 +68,7 @@ A simple family movie voting system where everyone can propose movies and vote o
    npm start
    ```
    
-   Or for development with auto-reload:
+   Or for development:
    ```bash
    npm run dev
    ```
@@ -49,34 +78,89 @@ A simple family movie voting system where everyone can propose movies and vote o
    http://localhost:3000
    ```
 
-## How to Use
+## 📱 Access from Other Devices
 
-1. **Select your name** from the dropdown
-2. **Propose a movie**: Click "Propose Movie", search, and select
-3. **Vote**: Click the heart button on movies you'd like to watch (can't vote on your own)
-4. **Pick Tonight**: Click to see the highest-voted movie
-5. **Mark as Watched**: Click the checkmark to mark a movie as watched
-
-## Data Storage
-
-All data is stored in `data.json` in the project root. No database required!
-
-## Port Configuration
-
-Default port is 3000. Change it in `.env`:
+**On your local network:**
 ```
-PORT=8080
+http://192.168.1.100:3000  (wired)
+http://192.168.1.101:3000  (wireless)
 ```
 
-## Tech Stack
+Everyone can vote from their phones, tablets, or computers!
+
+## 🎮 How to Use
+
+### Nomination Phase (Mon-Wed)
+1. Select your name from dropdown
+2. Browse movie categories
+3. Click a movie to see details
+4. Click "Nominate This Movie"
+5. Wait for others to nominate
+
+### Voting Phase (Thu-Fri noon)
+1. Select your name
+2. Vote for your top 2 picks (can't vote for your own)
+3. Watch the countdown timer
+4. Change votes anytime before deadline
+
+### Results Phase (Fri evening-Sun)
+1. See the winners:
+   - 🥇 Gold = Friday movie
+   - 🥈 Silver = Saturday movie
+2. Check "Previous Weeks" tab for history
+
+## 👥 Family Members
+
+- Erik
+- Timea
+- Jázmin
+- Niki
+
+## 🗂️ Data Storage
+
+All data stored in `data.json`:
+- Current week nominations & votes
+- Previous weeks archive (last 12 weeks)
+- Auto-managed, no database needed
+
+## 🎨 Tech Stack
 
 - **Backend**: Node.js + Express
 - **Frontend**: Vanilla HTML/CSS/JavaScript
-- **APIs**: TMDb (search), RPDB (posters)
+- **APIs**: TMDb (search & browse), RPDB (posters)
 - **Storage**: JSON file
 
-## Family Members
+## 📅 Phase Schedule
 
-Erik, Timea, Jázmin, Niki
+| Day | Phase | Actions |
+|-----|-------|---------|
+| Monday | Nomination | Propose 1 movie |
+| Tuesday | Nomination | Propose 1 movie |
+| Wednesday | Nomination | Propose 1 movie |
+| Thursday | Voting | Vote for 2 movies |
+| Friday (until noon) | Voting | Vote for 2 movies |
+| Friday (afternoon) | Results | Winners announced |
+| Saturday | Results | Movie night! |
+| Sunday | Results | Archive & prepare reset |
 
-Enjoy your movie nights! 🎬
+## 🔄 Auto-Reset
+
+Every Monday, the system:
+1. Archives last week's data to history
+2. Resets nominations & votes
+3. Starts new nomination phase
+4. Keeps last 12 weeks of history
+
+## 🎯 Rules
+
+- 1 nomination per person per week
+- Must vote for exactly 2 movies
+- Can't vote for your own nomination
+- Voting closes Friday at noon
+- Winners determined by vote count
+
+## 🎬 Enjoy your movie nights!
+
+---
+
+**Version 2.0** - Netflix UI + Weekly Phases
