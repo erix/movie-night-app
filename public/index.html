@@ -615,6 +615,79 @@
       display: block;
     }
 
+    /* Star rating */
+    .star-rating {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .star {
+      font-size: 1.5em;
+      cursor: pointer;
+      color: #666;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .star.filled {
+      color: #ffd700;
+    }
+
+    .star:hover {
+      transform: scale(1.2);
+    }
+
+    .rating-average {
+      margin-left: 10px;
+      color: #ffd700;
+      font-weight: 600;
+      font-size: 1.1em;
+    }
+
+    .rating-count {
+      color: #999;
+      font-size: 0.9em;
+      margin-left: 5px;
+    }
+
+    .my-ratings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .rating-card {
+      background: #1c1c1c;
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .rating-card-backdrop {
+      width: 100%;
+      height: 140px;
+      object-fit: cover;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .rating-card-info {
+      padding: 12px;
+    }
+
+    .user-star-rating {
+      display: flex;
+      gap: 3px;
+      margin-top: 8px;
+    }
+
+    .user-star {
+      font-size: 1.2em;
+      color: #ffd700;
+    }
+
     /* History */
     .history-item {
       background: #1c1c1c;
@@ -950,6 +1023,7 @@
     <div class="tabs">
       <button class="tab active" onclick="switchTab('current')">This Week</button>
       <button class="tab" onclick="switchTab('history')">Previous Weeks</button>
+      <button class="tab" onclick="switchTab('myratings')">My Ratings</button>
     </div>
 
     <div id="currentTab" class="tab-content active">
@@ -959,6 +1033,10 @@
 
     <div id="historyTab" class="tab-content">
       <div id="historyContent"></div>
+    </div>
+
+    <div id="myRatingsTab" class="tab-content">
+      <div id="myRatingsContent"></div>
     </div>
   </div>
 
@@ -1667,10 +1745,14 @@
       if (tab === 'current') {
         document.querySelectorAll('.tab')[0].classList.add('active');
         document.getElementById('currentTab').classList.add('active');
-      } else {
+      } else if (tab === 'history') {
         document.querySelectorAll('.tab')[1].classList.add('active');
         document.getElementById('historyTab').classList.add('active');
         loadHistory();
+      } else if (tab === 'myratings') {
+        document.querySelectorAll('.tab')[2].classList.add('active');
+        document.getElementById('myRatingsTab').classList.add('active');
+        loadMyRatings();
       }
     }
 
@@ -1696,6 +1778,13 @@
                   ? `https://image.tmdb.org/t/p/w500${movie.backdropPath}`
                   : `https://image.tmdb.org/t/p/w500${movie.posterPath || ''}`;
                 
+                // Calculate average rating
+                const ratings = movie.ratings ? Object.values(movie.ratings) : [];
+                const avgRating = ratings.length > 0 
+                  ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1)
+                  : 0;
+                const userRating = movie.ratings && currentUser ? movie.ratings[currentUser] : 0;
+                
                 return `
                   <div class="nomination-card">
                     <div class="place-badge ${idx === 0 ? 'first' : 'second'}">
@@ -1712,6 +1801,14 @@
                         </span>
                       </div>
                       <div class="vote-count">${voteCount} votes</div>
+                      ${currentUser ? `
+                        <div class="star-rating">
+                          ${[1,2,3,4,5].map(star => `
+                            <span class="star ${star <= userRating ? 'filled' : ''}" onclick="rateMovie('${movie.id}', ${star}, '${week.weekNumber}')">★</span>
+                          `).join('')}
+                          ${avgRating > 0 ? `<span class="rating-average">${avgRating}</span><span class="rating-count">(${ratings.length})</span>` : ''}
+                        </div>
+                      ` : ''}
                     </div>
                   </div>
                 `;
@@ -1720,6 +1817,68 @@
           </div>
         `;
       }).join('');
+    }
+
+    // Rate a movie
+    async function rateMovie(movieId, rating, weekNumber) {
+      if (!currentUser) return;
+      
+      const response = await fetch('/api/rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movieId, user: currentUser, rating, weekNumber })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        loadHistory(); // Reload to show updated ratings
+      }
+    }
+
+    // Load user's personal ratings
+    async function loadMyRatings() {
+      if (!currentUser) {
+        document.getElementById('myRatingsContent').innerHTML = '<div class="waiting-message">Please login to see your ratings</div>';
+        return;
+      }
+      
+      const response = await fetch(`/api/user/${currentUser}/ratings`);
+      const ratings = await response.json();
+      
+      const container = document.getElementById('myRatingsContent');
+      
+      if (ratings.length === 0) {
+        container.innerHTML = '<div class="waiting-message">You haven\'t rated any movies yet</div>';
+        return;
+      }
+      
+      container.innerHTML = `
+        <div class="section-title">My Ratings</div>
+        <div class="my-ratings-grid">
+          ${ratings.map(movie => {
+            const backdropUrl = movie.backdropPath 
+              ? `https://image.tmdb.org/t/p/w500${movie.backdropPath}`
+              : `https://image.tmdb.org/t/p/w500${movie.posterPath || ''}`;
+            
+            return `
+              <div class="rating-card">
+                <img class="rating-card-backdrop" src="${backdropUrl}" alt="${movie.title}">
+                <div class="rating-card-info">
+                  <div class="movie-title">${movie.title}</div>
+                  <div class="movie-meta">
+                    <span>${movie.year}</span>
+                    <span style="color:#999;margin-left:10px;">Week ${movie.weekNumber}</span>
+                  </div>
+                  <div class="user-star-rating">
+                    ${[1,2,3,4,5].map(star => `<span class="user-star">${star <= movie.userRating ? '★' : '☆'}</span>`).join('')}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
     }
 
     // Set up search event delegation (runs once, survives DOM changes)

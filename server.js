@@ -393,6 +393,89 @@ app.get('/api/votes/:user', (req, res) => {
   });
 });
 
+// Add or update rating for a movie
+app.post('/api/rate', (req, res) => {
+  const { movieId, user, rating, weekNumber } = req.body;
+  
+  if (!user || rating === undefined || (rating < 1 || rating > 5)) {
+    return res.status(400).json({ error: 'Invalid rating (must be 1-5)' });
+  }
+  
+  let data = readData();
+  let movie = null;
+  let targetWeek = null;
+  
+  // Check current week first
+  if (data.currentWeek.weekNumber === weekNumber) {
+    movie = data.currentWeek.nominations.find(m => m.id === movieId);
+    targetWeek = data.currentWeek;
+  } else {
+    // Check history
+    targetWeek = data.history.find(w => w.weekNumber === weekNumber);
+    if (targetWeek) {
+      movie = targetWeek.allMovies.find(m => m.id === movieId);
+    }
+  }
+  
+  if (!movie) {
+    return res.status(404).json({ error: 'Movie not found' });
+  }
+  
+  // Initialize ratings object if it doesn't exist
+  if (!movie.ratings) {
+    movie.ratings = {};
+  }
+  
+  movie.ratings[user] = rating;
+  writeData(data);
+  
+  // Calculate average
+  const ratings = Object.values(movie.ratings);
+  const average = ratings.length > 0 
+    ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1)
+    : 0;
+  
+  res.json({ 
+    success: true, 
+    ratings: movie.ratings,
+    average: parseFloat(average)
+  });
+});
+
+// Get user's personal ratings
+app.get('/api/user/:user/ratings', (req, res) => {
+  const { user } = req.params;
+  const data = readData();
+  
+  const ratedMovies = [];
+  
+  // Check current week
+  data.currentWeek.nominations.forEach(movie => {
+    if (movie.ratings && movie.ratings[user]) {
+      ratedMovies.push({
+        ...movie,
+        userRating: movie.ratings[user],
+        weekNumber: data.currentWeek.weekNumber
+      });
+    }
+  });
+  
+  // Check history
+  data.history.forEach(week => {
+    week.allMovies.forEach(movie => {
+      if (movie.ratings && movie.ratings[user]) {
+        ratedMovies.push({
+          ...movie,
+          userRating: movie.ratings[user],
+          weekNumber: week.weekNumber
+        });
+      }
+    });
+  });
+  
+  res.json(ratedMovies);
+});
+
 // Update user icon
 app.post('/api/user/icon', (req, res) => {
   const { user, icon } = req.body;
