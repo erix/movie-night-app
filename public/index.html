@@ -1369,12 +1369,16 @@
         message = '<div class="waiting-message">Nominations open Monday. Browse and plan ahead!</div>';
       }
       
+      // Check if browse section already exists
+      const existingSearch = document.getElementById('movieSearch');
+      const searchValue = existingSearch ? existingSearch.value : '';
+      
       section.innerHTML = `
         <div class="section-title">${title}</div>
         ${message}
         <div class="search-container">
           <div class="search-input-wrapper">
-            <input type="text" class="search-input" id="movieSearch" placeholder="Search movies by title..." autocomplete="off">
+            <input type="text" class="search-input" id="movieSearch" placeholder="Search movies by title..." autocomplete="off" value="${searchValue}">
             <button class="search-btn" onclick="clearSearch()">Clear</button>
           </div>
           <div id="searchSuggestions" class="search-suggestions"></div>
@@ -1382,8 +1386,8 @@
         <div id="searchResults"></div>
       `;
 
-      // Initialize search after DOM update
-      setTimeout(() => initSearch(), 100);
+      // Reinitialize search immediately
+      initSearchNow();
       
       const categories = [
         { id: 'trending', name: '🔥 Trending Now' },
@@ -1435,25 +1439,20 @@
       `;
     }
     
-    // Initialize search input
-    function initSearch() {
+    // Initialize search input immediately (called after DOM recreation)
+    function initSearchNow() {
       const searchInput = document.getElementById('movieSearch');
       if (!searchInput) {
-        console.log('Search input not found, retrying...');
-        setTimeout(() => initSearch(), 200);
+        console.error('❌ Search input not found!');
         return;
       }
 
-      // Prevent duplicate initialization
-      if (searchInput.dataset.initialized === 'true') {
-        console.log('Search already initialized');
-        return;
-      }
+      console.log('✅ Initializing search input');
 
-      searchInput.dataset.initialized = 'true';
-
+      // Add input listener for live search
       searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
+        console.log('Input event:', query);
         
         // Clear existing timeout
         if (searchTimeout) {
@@ -1472,8 +1471,8 @@
         }, 300);
       });
 
+      // Show suggestions on focus if there's text
       searchInput.addEventListener('focus', () => {
-        // Show suggestions if there's already text
         const query = searchInput.value.trim();
         if (query) {
           liveSearch(query);
@@ -1490,12 +1489,23 @@
         searchInitialized = true;
       }
 
-      console.log('Search initialized successfully');
+      console.log('Search initialized');
+    }
+
+    // Legacy function for compatibility
+    function initSearch() {
+      setTimeout(() => initSearchNow(), 100);
     }
 
     // Live search with autocomplete
     async function liveSearch(query) {
+      console.log('liveSearch called with:', query);
       const suggestionsDiv = document.getElementById('searchSuggestions');
+      
+      if (!suggestionsDiv) {
+        console.error('Suggestions div not found!');
+        return;
+      }
       
       if (!query) {
         hideSuggestions();
@@ -1505,37 +1515,45 @@
       // Show loading
       suggestionsDiv.innerHTML = '<div class="suggestion-loading">Searching...</div>';
       suggestionsDiv.classList.add('active');
+      console.log('Fetching search results for:', query);
 
-      const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
-      const movies = await response.json();
+      try {
+        const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
+        const movies = await response.json();
+        console.log('Got', movies.length, 'results');
 
-      if (movies.length === 0) {
-        suggestionsDiv.innerHTML = '<div class="suggestion-loading">No results found</div>';
-        return;
-      }
+        if (movies.length === 0) {
+          suggestionsDiv.innerHTML = '<div class="suggestion-loading">No results found</div>';
+          return;
+        }
 
-      suggestionsDiv.innerHTML = movies.slice(0, 8).map(movie => {
-        const backdropUrl = movie.backdrop_path 
-          ? `https://image.tmdb.org/t/p/w300${movie.backdrop_path}`
-          : (movie.poster_path 
-            ? `https://image.tmdb.org/t/p/w300${movie.poster_path}`
-            : 'https://via.placeholder.com/120x70?text=No+Image');
-        
-        const titleSafe = (movie.title || 'Unknown').replace(/'/g, '&apos;').replace(/"/g, '&quot;');
+        suggestionsDiv.innerHTML = movies.slice(0, 8).map(movie => {
+          const backdropUrl = movie.backdrop_path 
+            ? `https://image.tmdb.org/t/p/w300${movie.backdrop_path}`
+            : (movie.poster_path 
+              ? `https://image.tmdb.org/t/p/w300${movie.poster_path}`
+              : 'https://via.placeholder.com/120x70?text=No+Image');
+          
+          const titleSafe = (movie.title || 'Unknown').replace(/'/g, '&apos;').replace(/"/g, '&quot;');
 
-        return `
-          <div class="suggestion-item" onclick="selectSuggestion(${movie.id})">
-            <img class="suggestion-backdrop" src="${backdropUrl}" alt="${titleSafe}" onerror="this.src='https://via.placeholder.com/120x70?text=No+Image'">
-            <div class="suggestion-info">
-              <div class="suggestion-title">${titleSafe}</div>
-              <div class="suggestion-meta">
-                <span class="rating">⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}</span>
-                <span>${movie.release_date ? movie.release_date.split('-')[0] : 'N/A'}</span>
+          return `
+            <div class="suggestion-item" onclick="selectSuggestion(${movie.id})">
+              <img class="suggestion-backdrop" src="${backdropUrl}" alt="${titleSafe}" onerror="this.src='https://via.placeholder.com/120x70?text=No+Image'">
+              <div class="suggestion-info">
+                <div class="suggestion-title">${titleSafe}</div>
+                <div class="suggestion-meta">
+                  <span class="rating">⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}</span>
+                  <span>${movie.release_date ? movie.release_date.split('-')[0] : 'N/A'}</span>
+                </div>
               </div>
             </div>
-          </div>
-        `;
-      }).join('');
+          `;
+        }).join('');
+        console.log('Search suggestions rendered');
+      } catch (error) {
+        console.error('Search error:', error);
+        suggestionsDiv.innerHTML = '<div class="suggestion-loading">Search failed. Try again.</div>';
+      }
     }
 
     function hideSuggestions() {
