@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: movie-night
+  namespace: default
+  labels:
+    app: movie-night
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: movie-night
+  template:
+    metadata:
+      labels:
+        app: movie-night
+    spec:
+      initContainers:
+      - name: git-clone
+        image: alpine/git:latest
+        command:
+        - sh
+        - -c
+        - |
+          git clone https://github.com/erix/movie-night-app.git /app
+          cd /app && npm install
+        volumeMounts:
+        - name: app-code
+          mountPath: /app
+      containers:
+      - name: movie-night
+        image: node:20-alpine
+        workingDir: /app
+        command: ["node", "server.js"]
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: PORT
+          value: "3000"
+        - name: TMDB_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: movie-night-secrets
+              key: tmdb-api-key
+        volumeMounts:
+        - name: app-code
+          mountPath: /app
+        - name: data
+          mountPath: /app/data.json
+          subPath: data.json
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/state
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/state
+            port: 3000
+          initialDelaySeconds: 20
+          periodSeconds: 10
+      volumes:
+      - name: app-code
+        emptyDir: {}
+      - name: data
+        persistentVolumeClaim:
+          claimName: movie-night-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: movie-night-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
