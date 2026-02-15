@@ -17,13 +17,16 @@ spec:
     spec:
       initContainers:
       - name: git-clone
-        image: alpine/git:latest
+        image: node:20-alpine
         command:
         - sh
         - -c
         - |
-          git clone https://github.com/erix/movie-night-app.git /app
-          cd /app && npm install
+          apk add --no-cache git
+          rm -rf /app/*
+          git clone https://github.com/erix/movie-night-app.git /tmp/repo
+          mv /tmp/repo/* /app/
+          cd /app && npm install --production
         volumeMounts:
         - name: app-code
           mountPath: /app
@@ -43,12 +46,13 @@ spec:
             secretKeyRef:
               name: movie-night-secrets
               key: tmdb-api-key
+        - name: DATA_DIR
+          value: "/data"
         volumeMounts:
         - name: app-code
           mountPath: /app
         - name: data
-          mountPath: /app/data.json
-          subPath: data.json
+          mountPath: /data
         resources:
           requests:
             memory: "128Mi"
