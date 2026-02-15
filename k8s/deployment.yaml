@@ -62,6 +62,16 @@ spec:
             secretKeyRef:
               name: movie-night-secrets
               key: tmdb-api-key
+        - name: MDBLIST_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: movie-night-secrets
+              key: mdblist-api-key
+        - name: MDBLIST_LIST_ID
+          valueFrom:
+            secretKeyRef:
+              name: movie-night-secrets
+              key: mdblist-list-id
         - name: DATA_DIR
           value: "/data"
         volumeMounts:
