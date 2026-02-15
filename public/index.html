@@ -948,7 +948,6 @@
     let setupMode = false;
     let setupUser = '';
     let searchTimeout = null;
-    let searchInitialized = false;
 
     const availableIcons = [
       '👨‍💼', '👩‍💼', '👨‍🔬', '👩‍🔬', '👨‍🎨', '👩‍🎨',
@@ -1439,62 +1438,14 @@
       `;
     }
     
-    // Initialize search input immediately (called after DOM recreation)
+    // Initialize search ONCE using event delegation
     function initSearchNow() {
-      const searchInput = document.getElementById('movieSearch');
-      if (!searchInput) {
-        console.error('❌ Search input not found!');
-        return;
-      }
-
-      console.log('✅ Initializing search input');
-
-      // Add input listener for live search
-      searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.trim();
-        console.log('Input event:', query);
-        
-        // Clear existing timeout
-        if (searchTimeout) {
-          clearTimeout(searchTimeout);
-        }
-
-        // Hide suggestions if empty
-        if (!query) {
-          hideSuggestions();
-          return;
-        }
-
-        // Debounce search (300ms delay)
-        searchTimeout = setTimeout(() => {
-          liveSearch(query);
-        }, 300);
-      });
-
-      // Show suggestions on focus if there's text
-      searchInput.addEventListener('focus', () => {
-        const query = searchInput.value.trim();
-        if (query) {
-          liveSearch(query);
-        }
-      });
-
-      // Add global click handler only once
-      if (!searchInitialized) {
-        document.addEventListener('click', (e) => {
-          if (!e.target.closest('.search-container')) {
-            hideSuggestions();
-          }
-        });
-        searchInitialized = true;
-      }
-
-      console.log('Search initialized');
+      // Do nothing - event delegation handles it
     }
 
     // Legacy function for compatibility
     function initSearch() {
-      setTimeout(() => initSearchNow(), 100);
+      // Do nothing - event delegation handles it
     }
 
     // Live search with autocomplete
@@ -1736,6 +1687,51 @@
         `;
       }).join('');
     }
+
+    // Set up search event delegation (runs once, survives DOM changes)
+    document.addEventListener('input', (e) => {
+      if (e.target.id === 'movieSearch') {
+        const query = e.target.value.trim();
+        console.log('🔍 Search input:', query);
+        
+        // Clear existing timeout
+        if (searchTimeout) {
+          clearTimeout(searchTimeout);
+        }
+
+        // Hide suggestions if empty
+        if (!query) {
+          hideSuggestions();
+          return;
+        }
+
+        // Debounce search (300ms delay)
+        searchTimeout = setTimeout(() => {
+          console.log('⏱️ Triggering search for:', query);
+          liveSearch(query);
+        }, 300);
+      }
+    });
+
+    // Handle focus to show existing suggestions
+    document.addEventListener('focus', (e) => {
+      if (e.target.id === 'movieSearch') {
+        const query = e.target.value.trim();
+        if (query) {
+          console.log('🎯 Refocused with query:', query);
+          liveSearch(query);
+        }
+      }
+    }, true); // Use capture phase
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.search-container')) {
+        hideSuggestions();
+      }
+    });
+
+    console.log('✅ Search event delegation initialized');
 
     // Initial load
     checkSession();
