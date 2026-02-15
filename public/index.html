@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport"="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Movie Night 🍿</title>
   <style>
     * {
@@ -138,10 +138,17 @@
       color: #e50914;
       cursor: pointer;
       text-decoration: underline;
+      font-size: 1.1em;
+      padding: 15px;
+      display: inline-block;
     }
 
     .setup-link:hover {
       color: #f40612;
+    }
+
+    .setup-link:active {
+      transform: scale(0.98);
     }
 
     .user-list {
@@ -629,6 +636,7 @@
       width: 100%;
       max-height: 90vh;
       overflow-y: auto;
+      position: relative;
     }
 
     .modal-header {
@@ -701,7 +709,7 @@
       }
 
       h1 {
-        font-size: 1.5em;
+        font-size: 1.8em;
       }
 
       .nominations-grid {
@@ -709,7 +717,183 @@
       }
 
       .movie-card {
-        min-width: 250px;
+        min-width: 280px;
+      }
+
+      .nomination-card {
+        font-size: 1.1em;
+      }
+
+      .nomination-title {
+        font-size: 1.3em;
+      }
+
+      .vote-btn, .watched-btn {
+        padding: 12px;
+        font-size: 1.1em;
+      }
+
+      .section-title {
+        font-size: 1.6em;
+      }
+
+      .row-title {
+        font-size: 1.3em;
+      }
+
+      .search-input {
+        font-size: 18px;
+        padding: 14px 18px;
+      }
+
+      .search-btn {
+        font-size: 16px;
+        padding: 14px 24px;
+      }
+
+      /* Modal adjustments for mobile */
+      .modal-content {
+        width: 95%;
+        max-width: 500px;
+        padding: 25px;
+      }
+
+      .modal-header h2 {
+        font-size: 1.5em;
+      }
+
+      .close-btn {
+        font-size: 2.5em;
+      }
+
+      /* PIN pad mobile optimization */
+      .pin-display {
+        font-size: 2.5em;
+        margin: 15px 0;
+      }
+
+      .pin-pad {
+        max-width: 100%;
+        gap: 12px;
+      }
+
+      .pin-btn {
+        padding: 25px;
+        font-size: 2em;
+        min-height: 70px;
+      }
+
+      /* User cards mobile */
+      .user-list {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .user-card {
+        padding: 25px;
+      }
+
+      .user-card-icon {
+        font-size: 4em;
+      }
+
+      .user-card-name {
+        font-size: 1.5em;
+      }
+
+      /* Search suggestions mobile */
+      .suggestion-item {
+        padding: 12px;
+      }
+
+      .suggestion-backdrop {
+        width: 100px;
+        height: 60px;
+      }
+
+      .suggestion-title {
+        font-size: 1em;
+      }
+
+      .suggestion-meta {
+        font-size: 0.85em;
+      }
+
+      /* Movie detail modal */
+      .detail-title {
+        font-size: 1.6em;
+      }
+
+      .detail-meta {
+        font-size: 1em;
+      }
+
+      .detail-overview {
+        font-size: 1.05em;
+        line-height: 1.6;
+      }
+
+      .nominate-btn {
+        font-size: 1.2em;
+        padding: 16px;
+      }
+
+      /* Icon picker */
+      .icon-picker {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+
+      .icon-option {
+        font-size: 2.5em;
+        padding: 18px;
+      }
+
+      /* Phase banner */
+      .phase-banner {
+        font-size: 1em;
+        padding: 15px 20px;
+      }
+
+      .countdown {
+        font-size: 1.3em;
+      }
+
+      /* Tabs */
+      .tabs {
+        gap: 10px;
+      }
+
+      .tab {
+        padding: 12px 20px;
+        font-size: 1em;
+      }
+
+      /* History */
+      .history-week {
+        font-size: 1.2em;
+      }
+
+      .history-winners {
+        grid-template-columns: 1fr;
+      }
+
+      /* User info header */
+      .user-select {
+        gap: 10px;
+      }
+
+      .user-icon {
+        font-size: 2em;
+      }
+
+      #userName {
+        font-size: 1.3em !important;
+      }
+
+      select, button {
+        font-size: 16px;
+        padding: 12px 18px;
       }
     }
   </style>
@@ -825,11 +1009,19 @@
       document.getElementById('modal').classList.add('active');
     }
 
-    function showSetupChoice() {
+    async function showSetupChoice() {
+      // Make sure we have state loaded
+      if (!state || !state.users) {
+        const response = await fetch('/api/state');
+        state = await response.json();
+        userIcons = state.users || {};
+      }
+
       document.getElementById('modalTitle').textContent = 'Choose Your Name';
+      document.querySelector('.close-btn').style.display = 'none';
       document.getElementById('modalBody').innerHTML = `
         <div class="pin-container">
-          <p style="margin-bottom:20px;">Select your name to set up your PIN:</p>
+          <p style="margin-bottom:20px; font-size:1.1em;">Select your name to set up your PIN:</p>
           <div class="user-list">
             ${Object.keys(state.users || {}).map(user => `
               <div class="user-card" onclick="startPinSetup('${user}')">
