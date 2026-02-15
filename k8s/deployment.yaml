@@ -18,6 +18,20 @@ spec:
         version: "v2"
     spec:
       initContainers:
+      - name: cleanup-data
+        image: busybox
+        command:
+        - sh
+        - -c
+        - |
+          # Remove data.json if it's a directory (from previous mounts)
+          if [ -d /data/data.json ]; then
+            echo "Removing directory /data/data.json"
+            rm -rf /data/data.json
+          fi
+        volumeMounts:
+        - name: data
+          mountPath: /data
       - name: git-clone
         image: node:20-alpine
         command:
