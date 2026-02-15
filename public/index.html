@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Movie Night 🍿</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -39,9 +42,33 @@
     }
 
     h1 {
-      font-size: 2em;
-      color: #e50914;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      font-family: 'Bebas Neue', 'Impact', 'Arial Black', sans-serif;
+      font-size: 3.5em;
+      font-weight: 700;
+      letter-spacing: 4px;
+      background: linear-gradient(135deg, #ff6b6b 0%, #e50914 50%, #c41e3a 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: none;
+      filter: drop-shadow(0 4px 8px rgba(229, 9, 20, 0.6)) drop-shadow(0 0 30px rgba(229, 9, 20, 0.3));
+      position: relative;
+      display: inline-block;
+      margin: 0;
+    }
+
+    h1::before {
+      content: '🍿 MOVIE NIGHT';
+      position: absolute;
+      left: 0;
+      top: 0;
+      background: linear-gradient(135deg, #ff6b6b 0%, #e50914 50%, #c41e3a 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: blur(8px);
+      opacity: 0.4;
+      z-index: -1;
     }
 
     .user-select {
@@ -709,7 +736,12 @@
       }
 
       h1 {
-        font-size: 1.8em;
+        font-size: 2.5em;
+        letter-spacing: 2px;
+      }
+
+      h1::before {
+        content: '🍿 MOVIE NIGHT';
       }
 
       .nominations-grid {
