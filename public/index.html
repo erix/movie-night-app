@@ -536,7 +536,7 @@
       state = await response.json();
       renderPhase();
       renderNominations();
-      if (state.phase === 'nomination' && currentUser) {
+      if (currentUser) {
         loadBrowse();
       }
     }
@@ -607,13 +607,12 @@
     function renderNominations() {
       const section = document.getElementById('nominationsSection');
       
-      if (state.nominations.length === 0 && state.phase === 'nomination') {
-        section.innerHTML = '<div class="waiting-message">No nominations yet. Browse and nominate a movie!</div>';
-        return;
-      }
-      
       if (state.nominations.length === 0) {
-        section.innerHTML = '';
+        if (state.phase === 'nomination') {
+          section.innerHTML = '<div class="waiting-message">No nominations yet. Browse and nominate a movie!</div>';
+        } else {
+          section.innerHTML = '<div class="waiting-message">No nominations this week yet.</div>';
+        }
         return;
       }
       
@@ -696,14 +695,23 @@
     async function loadBrowse() {
       const section = document.getElementById('browseSection');
       
-      // Check if user already nominated
-      const userNominated = state.nominations.find(n => n.proposedBy === currentUser);
-      if (userNominated) {
-        section.innerHTML = '<div class="waiting-message">You\'ve already nominated a movie. Waiting for others...</div>';
-        return;
+      let title = 'Browse Movies';
+      let message = '';
+      
+      if (state.phase === 'nomination') {
+        const userNominated = state.nominations.find(n => n.proposedBy === currentUser);
+        if (userNominated) {
+          message = '<div class="waiting-message">You\'ve already nominated a movie. Waiting for others...</div>';
+        } else {
+          title = 'Browse & Nominate';
+        }
+      } else if (state.phase === 'voting') {
+        message = '<div class="waiting-message">Voting is open! Check nominated movies above.</div>';
+      } else if (state.phase === 'results') {
+        message = '<div class="waiting-message">Nominations open Monday. Browse and plan ahead!</div>';
       }
       
-      section.innerHTML = '<div class="section-title">Browse & Nominate</div>';
+      section.innerHTML = `<div class="section-title">${title}</div>${message}`;
       
       const categories = [
         { id: 'trending', name: 'Trending Now' },
@@ -750,6 +758,23 @@
       const userNominated = state.nominations.find(n => n.proposedBy === currentUser);
       const alreadyNominated = state.nominations.find(n => n.tmdbId === tmdbId);
       
+      let actionHtml = '';
+      if (!currentUser) {
+        actionHtml = '<div class="waiting-message">Select your name to nominate</div>';
+      } else if (state.phase !== 'nomination') {
+        if (state.phase === 'voting') {
+          actionHtml = '<div class="waiting-message">Nominations closed - voting is open!</div>';
+        } else {
+          actionHtml = '<div class="waiting-message">Nominations open Monday</div>';
+        }
+      } else if (userNominated) {
+        actionHtml = '<div class="waiting-message">You\'ve already nominated a movie this week</div>';
+      } else if (alreadyNominated) {
+        actionHtml = '<div class="waiting-message">This movie has already been nominated</div>';
+      } else {
+        actionHtml = `<button class="nominate-btn" onclick="nominateMovie(${tmdbId})">Nominate This Movie</button>`;
+      }
+      
       document.getElementById('modalBody').innerHTML = `
         <div class="movie-detail">
           <img class="detail-backdrop" src="${backdropUrl}" alt="${movie.title}" onerror="this.src='https://via.placeholder.com/600x340?text=${encodeURIComponent(movie.title)}'">
@@ -760,15 +785,7 @@
             <span>${movie.runtime ? movie.runtime + ' min' : ''}</span>
           </div>
           <div class="detail-overview">${movie.overview || 'No overview available.'}</div>
-          ${state.phase === 'nomination' && currentUser && !userNominated && !alreadyNominated ? `
-            <button class="nominate-btn" onclick="nominateMovie(${tmdbId})">
-              Nominate This Movie
-            </button>
-          ` : userNominated ? `
-            <div class="waiting-message">You've already nominated a movie this week</div>
-          ` : alreadyNominated ? `
-            <div class="waiting-message">This movie has already been nominated</div>
-          ` : ''}
+          ${actionHtml}
         </div>
       `;
       
@@ -886,6 +903,10 @@
 
     // Initial load
     loadState();
+    
+    // Always show browse section placeholder
+    document.getElementById('browseSection').innerHTML = '<div class="waiting-message">Select your name to browse movies</div>';
+    
     setInterval(loadState, 30000); // Refresh every 30s
   </script>
 </body>
