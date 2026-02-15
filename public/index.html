@@ -1251,14 +1251,14 @@
     }
 
     // Load current state
-    async function loadState() {
+    async function loadState(skipBrowse = false) {
       const response = await fetch('/api/state');
       state = await response.json();
       userIcons = state.users || {};
       updateUserInfo();
       renderPhase();
       renderNominations();
-      if (currentUser) {
+      if (currentUser && !skipBrowse) {
         await loadBrowse();
       }
     }
@@ -1930,7 +1930,7 @@
     checkSession();
     
     setInterval(() => {
-      if (currentUser) loadState();
+      if (currentUser) loadState(true); // Skip browse section reload to prevent scroll jump
     }, 30000); // Refresh every 30s if logged in
   </script>
 </body>
