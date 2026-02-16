@@ -31,7 +31,7 @@ const initReminders = (helpers) => {
     
     const data = dataHelpers.readData();
     const users = Object.keys(data.users);
-    const nominated = data.currentWeek.nominations.map(n => n.nominatedBy);
+    const nominated = data.currentWeek.nominations.map(n => n.proposedBy);
     const missing = users.filter(u => !nominated.includes(u));
 
     if (missing.length > 0) {
@@ -56,7 +56,7 @@ const initReminders = (helpers) => {
     if (movies.length > 0) {
       msg += `*This week's nominees:*\n`;
       movies.forEach((m, i) => {
-        msg += `${i + 1}. ${m.title} _(${m.nominatedBy})_\n`;
+        msg += `${i + 1}. ${m.title} _(${m.proposedBy})_\n`;
       });
       msg += `\nUse /vote to pick your favorites!\n`;
       msg += `_Voting closes Friday noon_`;
@@ -112,12 +112,12 @@ const initReminders = (helpers) => {
     
     let msg = `🏆 *The Results Are In!*\n\n`;
     msg += `🥇 *WINNER:* ${winner.title}\n`;
-    msg += `   👤 Nominated by ${winner.nominatedBy}\n`;
+    msg += `   👤 Nominated by ${winner.proposedBy}\n`;
     msg += `   👍 ${winner.votes || 0} votes\n\n`;
     
     if (runnerUp) {
       msg += `🥈 *Runner-up:* ${runnerUp.title}\n`;
-      msg += `   👤 ${runnerUp.nominatedBy} | 👍 ${runnerUp.votes || 0} votes\n\n`;
+      msg += `   👤 ${runnerUp.proposedBy} | 👍 ${runnerUp.votes || 0} votes\n\n`;
     }
     
     msg += `🎬 Tonight's movie: *${winner.title}*\n`;

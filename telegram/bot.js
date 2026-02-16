@@ -67,7 +67,7 @@ const initBot = (helpers) => {
     let statusMsg = `${phaseEmoji[phase]} *${phaseText[phase]}*\n\n`;
     
     if (phase === 'nomination') {
-      const nominated = week.nominations.map(n => n.nominatedBy);
+      const nominated = week.nominations.map(n => n.proposedBy);
       const users = Object.keys(data.users);
       const missing = users.filter(u => !nominated.includes(u));
       
@@ -93,7 +93,7 @@ const initBot = (helpers) => {
       if (sorted.length > 0) {
         const winner = sorted[0];
         statusMsg += `🥇 *Winner:* ${winner.title}\n`;
-        statusMsg += `   Nominated by ${winner.nominatedBy}\n`;
+        statusMsg += `   Nominated by ${winner.proposedBy}\n`;
         if (sorted.length > 1) {
           statusMsg += `🥈 *Runner-up:* ${sorted[1].title}`;
         }
@@ -119,7 +119,7 @@ const initBot = (helpers) => {
     nominations.forEach((movie, i) => {
       const votes = movie.votes || 0;
       msg += `${i + 1}. *${movie.title}* (${movie.year || 'N/A'})\n`;
-      msg += `   👤 ${movie.nominatedBy} | 👍 ${votes} votes\n\n`;
+      msg += `   👤 ${movie.proposedBy} | 👍 ${votes} votes\n\n`;
     });
 
     await ctx.reply(msg, { parse_mode: 'Markdown' });
@@ -216,7 +216,7 @@ const initBot = (helpers) => {
       const data = dataHelpers.readData();
       
       // Check if user already nominated
-      const existing = data.currentWeek.nominations.find(n => n.nominatedBy === familyUser);
+      const existing = data.currentWeek.nominations.find(n => n.proposedBy === familyUser);
       if (existing) {
         await ctx.answerCallbackQuery({
           text: `❌ You already nominated "${existing.title}" this week`,
@@ -232,7 +232,7 @@ const initBot = (helpers) => {
         year: movie.release_date?.split('-')[0],
         poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
         overview: movie.overview,
-        nominatedBy: familyUser,
+        proposedBy: familyUser,
         votes: 0
       };
 
@@ -296,7 +296,7 @@ const initBot = (helpers) => {
     }
 
     // Filter out user's own nomination
-    const votable = nominations.filter(n => n.nominatedBy !== familyUser);
+    const votable = nominations.filter(n => n.proposedBy !== familyUser);
     
     if (votable.length === 0) {
       await ctx.reply('No movies to vote on (you can\'t vote for your own nomination).');
@@ -312,7 +312,7 @@ const initBot = (helpers) => {
     votable.forEach((movie, i) => {
       const voted = existingVote?.includes(movie.id) ? '✅ ' : '';
       msg += `${voted}*${movie.title}* (${movie.year})\n`;
-      msg += `   👤 ${movie.nominatedBy}\n\n`;
+      msg += `   👤 ${movie.proposedBy}\n\n`;
       
       keyboard.text(movie.title.substring(0, 25), `vote:${movie.id}`);
       if (i % 2 === 1) keyboard.row();
