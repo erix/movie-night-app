@@ -395,6 +395,30 @@ app.post('/api/nominate', async (req, res) => {
   }
 });
 
+// Withdraw nomination (to change your pick)
+app.post('/api/withdraw-nomination', (req, res) => {
+  const { user } = req.body;
+  let data = readData();
+  data = checkAndUpdatePhase(data);
+  
+  // Only allow during nomination phase
+  if (data.currentWeek.phase !== 'nomination') {
+    return res.status(400).json({ error: 'Can only withdraw during nomination phase' });
+  }
+  
+  // Find and remove user's nomination
+  const nomIndex = data.currentWeek.nominations.findIndex(n => n.proposedBy === user);
+  
+  if (nomIndex === -1) {
+    return res.status(404).json({ error: 'No nomination found' });
+  }
+  
+  const removed = data.currentWeek.nominations.splice(nomIndex, 1)[0];
+  writeData(data);
+  
+  res.json({ success: true, removed: removed.title });
+});
+
 // Vote
 app.post('/api/vote', (req, res) => {
   const { movieId, user, value } = req.body;

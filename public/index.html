@@ -799,6 +799,28 @@
       color: #999;
     }
 
+    .waiting-message strong {
+      color: #fff;
+    }
+
+    .change-nomination-btn {
+      display: block;
+      margin: 15px auto 0;
+      padding: 10px 20px;
+      background: rgba(229, 9, 20, 0.2);
+      border: 1px solid #E50914;
+      color: #E50914;
+      border-radius: 5px;
+      font-size: 0.9em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .change-nomination-btn:hover {
+      background: #E50914;
+      color: #fff;
+    }
+
     @media (max-width: 768px) {
       .header {
         padding: 15px 20px;
@@ -1470,7 +1492,10 @@
       if (state.phase === 'nomination') {
         const userNominated = state.nominations.find(n => n.proposedBy === currentUser);
         if (userNominated) {
-          message = '<div class="waiting-message">You\'ve already nominated a movie. Waiting for others...</div>';
+          message = `<div class="waiting-message">
+            You nominated: <strong>${userNominated.title}</strong>
+            <button class="change-nomination-btn" onclick="withdrawNomination()">🔄 Change nomination</button>
+          </div>`;
         } else {
           title = 'Browse & Nominate';
         }
@@ -1663,7 +1688,17 @@
           actionHtml = '<div class="waiting-message">Nominations open Monday</div>';
         }
       } else if (userNominated) {
-        actionHtml = '<div class="waiting-message">You\'ve already nominated a movie this week</div>';
+        if (userNominated.tmdbId === tmdbId) {
+          actionHtml = `<div class="waiting-message">
+            ✓ This is your nomination
+            <button class="change-nomination-btn" onclick="withdrawNomination()">🔄 Pick a different movie</button>
+          </div>`;
+        } else {
+          actionHtml = `<div class="waiting-message">
+            You nominated: ${userNominated.title}
+            <button class="nominate-btn" onclick="changeNomination(${tmdbId})">🔄 Switch to this movie</button>
+          </div>`;
+        }
       } else if (alreadyNominated) {
         actionHtml = '<div class="waiting-message">This movie has already been nominated</div>';
       } else {
@@ -1704,6 +1739,47 @@
       
       closeModal();
       loadState();
+    }
+
+    // Withdraw nomination (to change your pick)
+    async function withdrawNomination() {
+      if (!confirm('Remove your nomination so you can pick a different movie?')) {
+        return;
+      }
+      
+      const response = await fetch('/api/withdraw-nomination', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: currentUser })
+      });
+      
+      const result = await response.json();
+      
+      if (result.error) {
+        alert(result.error);
+        return;
+      }
+      
+      closeModal();
+      loadState();
+    }
+
+    // Change nomination to a different movie
+    async function changeNomination(tmdbId) {
+      // First withdraw current nomination
+      const withdrawResponse = await fetch('/api/withdraw-nomination', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: currentUser })
+      });
+      
+      if (!withdrawResponse.ok) {
+        alert('Failed to change nomination');
+        return;
+      }
+      
+      // Then nominate the new movie
+      await nominateMovie(tmdbId);
     }
 
     // Toggle vote
