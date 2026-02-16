@@ -13,6 +13,13 @@ const DATA_FILE = path.join(DATA_DIR, 'data.json');
 app.use(express.json());
 app.use(express.static('public'));
 
+// CORS for Stremio
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
+
 // Helper to get current week number
 const getWeekNumber = (d = new Date()) => {
   d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -632,6 +639,226 @@ app.get('/api/mdblist/status', (req, res) => {
     configured: !!(process.env.MDBLIST_API_KEY && process.env.MDBLIST_LIST_ID),
     listId: process.env.MDBLIST_LIST_ID ? process.env.MDBLIST_LIST_ID.substring(0, 8) + '...' : null
   });
+});
+
+// ============================================================================
+// Stremio Addon Endpoints
+// ============================================================================
+
+// Helper to format movie for Stremio meta preview
+const formatMetaPreview = (movie, metadata = {}) => {
+  return {
+    id: `tmdb:${movie.tmdbId}`,
+    type: 'movie',
+    name: movie.title,
+    poster: movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : undefined,
+    description: movie.overview,
+    ...metadata
+  };
+};
+
+// Stremio addon manifest
+app.get('/manifest.json', (req, res) => {
+  res.json({
+    id: 'family.movie.night',
+    version: '1.0.0',
+    name: 'Family Movie Night',
+    description: 'Family voting history and watch tracking',
+    resources: ['catalog', 'meta'],
+    types: ['movie'],
+    catalogs: [
+      {
+        type: 'movie',
+        id: 'nominations',
+        name: "This Week's Nominations"
+      },
+      {
+        type: 'movie',
+        id: 'winners',
+        name: 'Movie Night Winners'
+      },
+      {
+        type: 'movie',
+        id: 'watched',
+        name: 'Watched Together'
+      }
+    ]
+  });
+});
+
+// Stremio catalog endpoint
+app.get('/catalog/:type/:id.json', (req, res) => {
+  const { type, id } = req.params;
+
+  if (type !== 'movie') {
+    return res.status(400).json({ error: 'Only movie type supported' });
+  }
+
+  let data = readData();
+  data = checkAndUpdatePhase(data);
+  const metas = [];
+
+  try {
+    if (id === 'nominations') {
+      // Current week's nominations
+      data.currentWeek.nominations.forEach(movie => {
+        metas.push(formatMetaPreview(movie, {
+          description: `${movie.overview}\n\nNominated by: ${movie.proposedBy}`
+        }));
+      });
+    } else if (id === 'winners') {
+      // Movies that won (first and second place from history)
+      data.history.forEach(week => {
+        if (week.firstPlace) {
+          metas.push(formatMetaPreview(week.firstPlace, {
+            description: `${week.firstPlace.overview}\n\n🏆 First Place - Week ${week.weekNumber}`
+          }));
+        }
+        if (week.secondPlace) {
+          metas.push(formatMetaPreview(week.secondPlace, {
+            description: `${week.secondPlace.overview}\n\n🥈 Second Place - Week ${week.weekNumber}`
+          }));
+        }
+      });
+    } else if (id === 'watched') {
+      // All watched movies (winners from history)
+      data.history.forEach(week => {
+        if (week.firstPlace) {
+          metas.push(formatMetaPreview(week.firstPlace, {
+            description: `${week.firstPlace.overview}\n\nWatched: Week ${week.weekNumber}`
+          }));
+        }
+        if (week.secondPlace) {
+          metas.push(formatMetaPreview(week.secondPlace, {
+            description: `${week.secondPlace.overview}\n\nWatched: Week ${week.weekNumber}`
+          }));
+        }
+      });
+    } else {
+      return res.status(404).json({ error: 'Catalog not found' });
+    }
+
+    res.json({ metas });
+  } catch (error) {
+    console.error('Catalog error:', error);
+    res.status(500).json({ error: 'Failed to fetch catalog' });
+  }
+});
+
+// Stremio meta endpoint
+app.get('/meta/:type/:id.json', async (req, res) => {
+  const { type, id } = req.params;
+
+  if (type !== 'movie') {
+    return res.status(400).json({ error: 'Only movie type supported' });
+  }
+
+  // Extract TMDB ID from Stremio ID format (tmdb:12345)
+  const tmdbId = id.startsWith('tmdb:') ? id.substring(5) : id;
+
+  if (!process.env.TMDB_API_KEY) {
+    return res.status(500).json({ error: 'TMDB API key not configured' });
+  }
+
+  try {
+    // Fetch movie details from TMDB
+    const response = await fetch(
+      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${process.env.TMDB_API_KEY}&append_to_response=external_ids,credits`
+    );
+
+    if (!response.ok) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+
+    const movie = await response.json();
+
+    // Get custom metadata from our data
+    const data = readData();
+    let customMeta = {};
+
+    // Check current week nominations
+    const currentNomination = data.currentWeek.nominations.find(n => n.tmdbId.toString() === tmdbId);
+    if (currentNomination) {
+      customMeta.nominatedBy = currentNomination.proposedBy;
+      customMeta.nominatedAt = currentNomination.proposedAt;
+
+      // Get vote counts
+      const voteData = data.currentWeek.votes[currentNomination.id] || {};
+      const voteCount = Object.values(voteData).filter(v => v).length;
+      customMeta.votes = voteCount;
+    }
+
+    // Check history for winner/watched info
+    data.history.forEach(week => {
+      const isFirstPlace = week.firstPlace && week.firstPlace.tmdbId.toString() === tmdbId;
+      const isSecondPlace = week.secondPlace && week.secondPlace.tmdbId.toString() === tmdbId;
+
+      if (isFirstPlace || isSecondPlace) {
+        customMeta.weekWon = week.weekNumber;
+        customMeta.placement = isFirstPlace ? 'First Place 🏆' : 'Second Place 🥈';
+
+        // Get ratings if available
+        const movieData = isFirstPlace ? week.firstPlace : week.secondPlace;
+        if (movieData.ratings) {
+          const ratings = Object.values(movieData.ratings);
+          const avgRating = ratings.length > 0
+            ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1)
+            : null;
+          if (avgRating) {
+            customMeta.familyRating = `${avgRating}/5 ⭐`;
+          }
+        }
+      }
+    });
+
+    // Format for Stremio
+    const meta = {
+      id: `tmdb:${movie.id}`,
+      type: 'movie',
+      name: movie.title,
+      poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
+      background: movie.backdrop_path ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}` : undefined,
+      logo: movie.backdrop_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
+      description: movie.overview,
+      releaseInfo: movie.release_date ? movie.release_date.split('-')[0] : undefined,
+      runtime: movie.runtime ? `${movie.runtime} min` : undefined,
+      director: movie.credits?.crew?.find(c => c.job === 'Director')?.name,
+      cast: movie.credits?.cast?.slice(0, 5).map(c => c.name),
+      genre: movie.genres?.map(g => g.name),
+      imdbRating: movie.vote_average ? movie.vote_average.toFixed(1) : undefined,
+      links: [
+        movie.external_ids?.imdb_id ? {
+          name: 'IMDb',
+          category: 'imdb',
+          url: `https://www.imdb.com/title/${movie.external_ids.imdb_id}`
+        } : null,
+        {
+          name: 'TMDB',
+          category: 'tmdb',
+          url: `https://www.themoviedb.org/movie/${movie.id}`
+        }
+      ].filter(Boolean)
+    };
+
+    // Add custom metadata to description
+    if (Object.keys(customMeta).length > 0) {
+      const customInfo = [];
+      if (customMeta.nominatedBy) customInfo.push(`Nominated by: ${customMeta.nominatedBy}`);
+      if (customMeta.votes !== undefined) customInfo.push(`Votes: ${customMeta.votes}`);
+      if (customMeta.placement) customInfo.push(customMeta.placement);
+      if (customMeta.familyRating) customInfo.push(`Family Rating: ${customMeta.familyRating}`);
+      if (customMeta.weekWon) customInfo.push(`Week: ${customMeta.weekWon}`);
+
+      if (customInfo.length > 0) {
+        meta.description = `${meta.description}\n\n${customInfo.join(' • ')}`;
+      }
+    }
+
+    res.json({ meta });
+  } catch (error) {
+    console.error('Meta fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch movie metadata' });
+  }
 });
 
 app.listen(PORT, () => {
