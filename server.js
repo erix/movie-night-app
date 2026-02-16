@@ -695,9 +695,16 @@ app.get('/catalog/:type/:id.json', (req, res) => {
   }
 
   let data = readData();
-  console.log('Before checkAndUpdatePhase - nominations count:', data.currentWeek.nominations.length);
+  const beforeCount = data.currentWeek.nominations.length;
+  const beforeWeek = data.currentWeek.weekNumber;
+  const beforePhase = data.currentWeek.phase;
+  
   data = checkAndUpdatePhase(data);
-  console.log('After checkAndUpdatePhase - nominations count:', data.currentWeek.nominations.length);
+  
+  const afterCount = data.currentWeek.nominations.length;
+  const afterWeek = data.currentWeek.weekNumber;
+  const afterPhase = data.currentWeek.phase;
+  
   const metas = [];
 
   try {
@@ -740,7 +747,13 @@ app.get('/catalog/:type/:id.json', (req, res) => {
       return res.status(404).json({ error: 'Catalog not found' });
     }
 
-    res.json({ metas });
+    res.json({ 
+      metas,
+      _debug: {
+        before: { week: beforeWeek, phase: beforePhase, count: beforeCount },
+        after: { week: afterWeek, phase: afterPhase, count: afterCount }
+      }
+    });
   } catch (error) {
     console.error('Catalog error:', error);
     res.status(500).json({ error: 'Failed to fetch catalog' });
