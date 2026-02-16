@@ -37,6 +37,7 @@ const initBot = (helpers) => {
     await ctx.reply(
       `🎬 *Movie Night Commands*\n\n` +
       `/nominate <movie> - Search and nominate a movie\n` +
+      `/mynomination - View/change your nomination\n` +
       `/vote - Vote on nominated movies\n` +
       `/status - Current phase and countdown\n` +
       `/movies - List this week's nominations\n` +
@@ -466,6 +467,91 @@ const initBot = (helpers) => {
         `Ask Erik to set up the account linking.`
       );
     }
+  });
+
+  // /mynomination command - view and change your nomination
+  bot.command('mynomination', async (ctx) => {
+    const telegramUser = getTelegramUserName(ctx);
+    const data = dataHelpers.readData();
+    const familyUser = findFamilyUser(telegramUser, data);
+
+    if (!familyUser) {
+      await ctx.reply('❌ Your Telegram isn\'t linked to a family account.');
+      return;
+    }
+
+    const myNomination = data.currentWeek.nominations.find(n => n.proposedBy === familyUser);
+    const phase = dataHelpers.getCurrentPhase();
+
+    if (!myNomination) {
+      if (phase === 'nomination') {
+        await ctx.reply(
+          `📝 *${familyUser}*, you haven't nominated a movie yet!\n\n` +
+          `Use /nominate <movie> to pick one.`,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        await ctx.reply(`You didn't nominate a movie this week.`);
+      }
+      return;
+    }
+
+    const keyboard = new InlineKeyboard();
+    
+    // Only allow changes during nomination phase
+    if (phase === 'nomination') {
+      keyboard.text('🔄 Change nomination', `change:${myNomination.tmdbId || myNomination.id}`);
+      keyboard.row();
+    }
+    
+    const tmdbId = myNomination.tmdbId || myNomination.id;
+    keyboard.text('🎬 View details', `movie:${tmdbId}`);
+
+    await ctx.reply(
+      `🎬 *Your nomination:*\n\n` +
+      `*${myNomination.title}* (${myNomination.year || '?'})\n\n` +
+      `${myNomination.overview?.substring(0, 150) || ''}...` +
+      (phase === 'nomination' ? `\n\n_You can change it until Thursday_` : ''),
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: keyboard 
+      }
+    );
+  });
+
+  // Handle change nomination button
+  bot.callbackQuery(/^change:(\d+)$/, async (ctx) => {
+    const phase = dataHelpers.getCurrentPhase();
+    
+    if (phase !== 'nomination') {
+      await ctx.answerCallbackQuery({ 
+        text: '❌ Can only change during nomination phase', 
+        show_alert: true 
+      });
+      return;
+    }
+
+    const telegramUser = getTelegramUserName(ctx);
+    const data = dataHelpers.readData();
+    const familyUser = findFamilyUser(telegramUser, data);
+
+    if (!familyUser) {
+      await ctx.answerCallbackQuery({ text: '❌ Account not linked', show_alert: true });
+      return;
+    }
+
+    // Remove current nomination
+    const nomIndex = data.currentWeek.nominations.findIndex(n => n.proposedBy === familyUser);
+    if (nomIndex > -1) {
+      data.currentWeek.nominations.splice(nomIndex, 1);
+      dataHelpers.writeData(data);
+    }
+
+    await ctx.editMessageText(
+      `🔄 *Nomination removed!*\n\n` +
+      `Use /nominate <movie> to pick a new one.`,
+      { parse_mode: 'Markdown' }
+    );
   });
 
   // Error handler
