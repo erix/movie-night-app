@@ -75,13 +75,13 @@ spec:
         - name: TELEGRAM_BOT_TOKEN
           valueFrom:
             secretKeyRef:
-              name: movie-night-secrets
+              name: movie-night-telegram
               key: telegram-bot-token
               optional: true
         - name: TELEGRAM_GROUP_ID
           valueFrom:
             secretKeyRef:
-              name: movie-night-secrets
+              name: movie-night-telegram
               key: telegram-group-id
               optional: true
         - name: DATA_DIR

@@ -9,3 +9,4 @@ data.json.old
 k8s/secret.yaml
 k8s/*-secret.yaml
 !k8s/sealed-secret.yaml
+k8s/telegram-secret.yaml
