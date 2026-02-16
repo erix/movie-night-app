@@ -35,35 +35,35 @@ const getCurrentPhase = () => {
   const day = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
   const hour = now.getHours();
   
-  // Monday (1) - Wednesday (3): Nomination
-  if (day >= 1 && day <= 3) {
+  // Monday (1) - Thursday (4): Nomination
+  if (day >= 1 && day <= 4) {
     return 'nomination';
   }
   
-  // Thursday (4) or Friday (5) before noon: Voting
-  if (day === 4 || (day === 5 && hour < 12)) {
+  // Friday (5) before 18:00: Voting
+  if (day === 5 && hour < 18) {
     return 'voting';
   }
   
-  // Friday noon onwards - Sunday: Results
+  // Friday 18:00 onwards - Sunday: Results
   return 'results';
 };
 
-// Helper to get voting deadline (Friday noon)
+// Helper to get voting deadline (Friday 18:00)
 const getVotingDeadline = () => {
   const now = new Date();
   const friday = new Date(now);
   
   // Find next Friday
   const daysUntilFriday = (5 - now.getDay() + 7) % 7;
-  if (daysUntilFriday === 0 && now.getDay() === 5 && now.getHours() >= 12) {
-    // If it's Friday after noon, get next Friday
+  if (daysUntilFriday === 0 && now.getDay() === 5 && now.getHours() >= 18) {
+    // If it's Friday after 18:00, get next Friday
     friday.setDate(now.getDate() + 7);
   } else {
     friday.setDate(now.getDate() + daysUntilFriday);
   }
   
-  friday.setHours(12, 0, 0, 0);
+  friday.setHours(18, 0, 0, 0);
   return friday.toISOString();
 };
 

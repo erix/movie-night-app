@@ -44,8 +44,8 @@ const initReminders = (helpers) => {
     }
   }, { timezone: 'Europe/Berlin' });
 
-  // Thursday 9am - Voting phase starts
-  cron.schedule('0 9 * * 4', async () => {
+  // Friday 9am - Voting phase starts
+  cron.schedule('0 9 * * 5', async () => {
     if (!dataHelpers) return;
     
     const data = dataHelpers.readData();
@@ -59,17 +59,17 @@ const initReminders = (helpers) => {
         msg += `${i + 1}. ${m.title} _(${m.proposedBy})_\n`;
       });
       msg += `\nUse /vote to pick your favorites!\n`;
-      msg += `_Voting closes Friday noon_`;
+      msg += `_Voting closes Friday 18:00_`;
     } else {
       msg += `No movies nominated this week 😢`;
     }
 
-    console.log('🔔 Sending Thursday voting reminder');
+    console.log('🔔 Sending Friday voting reminder');
     await sendGroupMessage(msg);
   }, { timezone: 'Europe/Berlin' });
 
-  // Friday 11am - Last hour warning
-  cron.schedule('0 11 * * 5', async () => {
+  // Friday 5pm - Last hour warning
+  cron.schedule('0 17 * * 5', async () => {
     if (!dataHelpers) return;
     
     const data = dataHelpers.readData();
@@ -90,8 +90,8 @@ const initReminders = (helpers) => {
     await sendGroupMessage(msg);
   }, { timezone: 'Europe/Berlin' });
 
-  // Friday 12:30pm - Results announcement
-  cron.schedule('30 12 * * 5', async () => {
+  // Friday 6:30pm - Results announcement
+  cron.schedule('30 18 * * 5', async () => {
     if (!dataHelpers) return;
     
     const data = dataHelpers.readData();
