@@ -6,14 +6,51 @@ This document explains the development, testing, and deployment workflow for the
 
 Movie Night is a family movie voting app with a Stremio addon integration. The family nominates movies, votes on them, and the app tracks watch history.
 
-## Architecture
+## App Architecture
+
+### Tech Stack
+
+- **Backend:** Node.js + Express
+- **Frontend:** Vanilla HTML/CSS/JavaScript (single `public/index.html`)
+- **Storage:** JSON file (`data.json`) - no database
+- **APIs:** TMDB (movie search & metadata), MDBList (list sync)
+
+### Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| No authentication | Home network only, 4 known family members |
+| JSON file storage | Simple, no database overhead, easy backup |
+| Vanilla JS frontend | No build step, easy to modify |
+| Stremio addon | Browse voting history directly in media player |
+| Weekly cycle | Mon-Wed: nominate, Thu-Fri: vote, Fri-Sun: watch |
+
+### Data Flow
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Local Dev      │────▶│  GitHub Actions  │────▶│  K8s (FluxCD)   │
-│  192.168.1.100  │     │  Version Bump    │     │  Production     │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   TMDB API  │────▶│  Movie Night│────▶│   MDBList   │
+│  (search)   │     │   Server    │     │  (sync)     │
+└─────────────┘     └─────────────┘     └─────────────┘
+                           │
+                    ┌──────┴──────┐
+                    ▼             ▼
+              ┌──────────┐  ┌──────────┐
+              │  Web UI  │  │ Stremio  │
+              │ (voting) │  │ (browse) │
+              └──────────┘  └──────────┘
 ```
+
+### Users
+
+4 family members with optional PIN protection:
+- Erik, Timea, Jázmin, Niki
+
+### Weekly Phases
+
+1. **Nomination** (Mon-Wed): Each person nominates 1 movie
+2. **Voting** (Thu-Fri noon): Everyone votes on nominations
+3. **Results** (Fri noon-Sun): Top 2 movies are watched, can be rated
 
 ## Development Workflow
 
@@ -65,6 +102,16 @@ kubectl exec $(kubectl get pod -l app=movie-night -o jsonpath='{.items[0].metada
 ## Deployment
 
 ### GitOps Pipeline
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Local Dev      │────▶│  GitHub Actions  │────▶│  K8s (FluxCD)   │
+│  192.168.1.100  │     │  Version Bump    │     │  Production     │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+        │                       │                        │
+        │ git push              │ auto-commit            │ auto-deploy
+        └───────────────────────┴────────────────────────┘
+```
 
 1. **Edit code** → Make changes locally
 2. **Test locally** → `node server.js` on 192.168.1.100:3000
