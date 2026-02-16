@@ -861,9 +861,34 @@ app.get('/meta/:type/:id.json', async (req, res) => {
   }
 });
 
+// Data helpers for Telegram bot integration
+const dataHelpers = {
+  readData,
+  writeData,
+  getCurrentPhase,
+  getWeekNumber,
+  getVotingDeadline,
+  checkAndUpdatePhase
+};
+
+// Initialize Telegram bot if configured
+if (process.env.TELEGRAM_BOT_TOKEN) {
+  const { initBot, startBot } = require('./telegram/bot');
+  const { initReminders } = require('./telegram/reminders');
+  
+  const bot = initBot(dataHelpers);
+  if (bot) {
+    startBot();
+    initReminders(dataHelpers);
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`Movie Night app running on http://localhost:${PORT}`);
   if (process.env.MDBLIST_API_KEY && process.env.MDBLIST_LIST_ID) {
     console.log(`✅ MDBList integration enabled (List: ${process.env.MDBLIST_LIST_ID})`);
+  }
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    console.log(`🤖 Telegram bot enabled`);
   }
 });
