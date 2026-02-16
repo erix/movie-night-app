@@ -695,7 +695,9 @@ app.get('/catalog/:type/:id.json', (req, res) => {
   }
 
   let data = readData();
+  console.log('Before checkAndUpdatePhase - nominations count:', data.currentWeek.nominations.length);
   data = checkAndUpdatePhase(data);
+  console.log('After checkAndUpdatePhase - nominations count:', data.currentWeek.nominations.length);
   const metas = [];
 
   try {
