@@ -105,7 +105,7 @@ const initBot = (helpers) => {
     await ctx.reply(statusMsg, { parse_mode: 'Markdown' });
   });
 
-  // /movies command - list this week's nominations
+  // /movies command - list this week's nominations with clickable buttons
   bot.command('movies', async (ctx) => {
     const data = dataHelpers.readData();
     const nominations = data.currentWeek.nominations;
@@ -116,13 +116,67 @@ const initBot = (helpers) => {
     }
 
     let msg = `🎬 *This Week's Movies*\n\n`;
+    const keyboard = new InlineKeyboard();
+    
     nominations.forEach((movie, i) => {
       const votes = movie.votes || 0;
       msg += `${i + 1}. *${movie.title}* (${movie.year || 'N/A'})\n`;
       msg += `   👤 ${movie.proposedBy} | 👍 ${votes} votes\n\n`;
+      
+      // Add clickable button for each movie
+      const tmdbId = movie.tmdbId || movie.id;
+      keyboard.text(`🎬 ${movie.title.substring(0, 25)}`, `movie:${tmdbId}`);
+      if (i % 1 === 0) keyboard.row(); // One button per row
     });
 
-    await ctx.reply(msg, { parse_mode: 'Markdown' });
+    msg += `_Tap a movie for details & trailer_`;
+
+    await ctx.reply(msg, { 
+      parse_mode: 'Markdown',
+      reply_markup: keyboard 
+    });
+  });
+
+  // Handle movie detail button clicks - show description + trailer
+  bot.callbackQuery(/^movie:(\d+)$/, async (ctx) => {
+    const tmdbId = ctx.match[1];
+    
+    try {
+      // Fetch movie details and videos from TMDb
+      const [movie, videos] = await Promise.all([
+        fetchTMDBMovie(tmdbId),
+        fetchTMDBVideos(tmdbId)
+      ]);
+
+      // Find YouTube trailer
+      const trailer = videos.results?.find(v => 
+        v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')
+      );
+
+      let msg = `🎬 *${movie.title}* (${movie.release_date?.split('-')[0] || '?'})\n\n`;
+      msg += `⭐ ${movie.vote_average?.toFixed(1) || 'N/A'}/10\n`;
+      msg += `🎭 ${movie.genres?.map(g => g.name).join(', ') || 'N/A'}\n`;
+      msg += `⏱ ${movie.runtime || '?'} min\n\n`;
+      msg += `${movie.overview || 'No description available.'}\n`;
+
+      const keyboard = new InlineKeyboard();
+      
+      if (trailer) {
+        keyboard.url('🎬 Watch Trailer', `https://www.youtube.com/watch?v=${trailer.key}`);
+      }
+      
+      // Add TMDb link
+      keyboard.row().url('📖 More Info', `https://www.themoviedb.org/movie/${tmdbId}`);
+
+      await ctx.editMessageText(msg, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+
+    } catch (error) {
+      console.error('Movie details error:', error);
+      await ctx.answerCallbackQuery({ text: '❌ Failed to load movie details', show_alert: true });
+    }
   });
 
   // /nominate command
@@ -489,6 +543,14 @@ const searchTMDB = async (query) => {
 const fetchTMDBMovie = async (tmdbId) => {
   const apiKey = process.env.TMDB_API_KEY;
   const url = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}`;
+  const res = await fetch(url);
+  return res.json();
+};
+
+// Fetch movie videos/trailers from TMDB
+const fetchTMDBVideos = async (tmdbId) => {
+  const apiKey = process.env.TMDB_API_KEY;
+  const url = `https://api.themoviedb.org/3/movie/${tmdbId}/videos?api_key=${apiKey}`;
   const res = await fetch(url);
   return res.json();
 };
