@@ -1466,7 +1466,7 @@
             }
             
             return `
-              <div class="${cardClass}">
+              <div class="${cardClass}" onclick="showMovieModal(${nom.tmdbId})" style="cursor: pointer;">
                 ${badge}
                 <img class="nomination-backdrop" src="${backdropUrl}" alt="${nom.title}" onerror="this.src='https://via.placeholder.com/300x200?text=${encodeURIComponent(nom.title)}'">
                 <div class="nomination-info">
@@ -1479,10 +1479,10 @@
                     </span>
                   </div>
                   ${state.phase === 'voting' && currentUser ? `
-                    <div class="vote-section">
+                    <div class="vote-section" onclick="event.stopPropagation()">
                       <button 
                         class="vote-btn ${userVoted ? 'voted' : ''}" 
-                        onclick="toggleVote('${nom.id}')"
+                        onclick="event.stopPropagation(); toggleVote('${nom.id}')"
                         ${isProposer ? 'disabled' : ''}
                       >
                         ${userVoted ? '❤️ Voted' : '🤍 Vote'}
