@@ -329,7 +329,7 @@ app.get('/api/movie/:tmdbId', async (req, res) => {
   
   try {
     const response = await fetch(
-      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${process.env.TMDB_API_KEY}&append_to_response=external_ids`
+      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${process.env.TMDB_API_KEY}&append_to_response=external_ids,videos`
     );
     const data = await response.json();
     res.json(data);

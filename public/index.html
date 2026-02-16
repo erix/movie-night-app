@@ -778,6 +778,26 @@
       gap: 20px;
       margin-bottom: 15px;
       color: #999;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .trailer-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      background: rgba(229, 9, 20, 0.9);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 0.9em;
+      transition: all 0.2s;
+    }
+
+    .trailer-btn:hover {
+      background: #ff1a1a;
+      transform: scale(1.05);
     }
 
     .detail-overview {
@@ -1705,6 +1725,14 @@
         actionHtml = `<button class="nominate-btn" onclick="nominateMovie(${tmdbId})">Nominate This Movie</button>`;
       }
       
+      // Find YouTube trailer
+      const trailer = movie.videos?.results?.find(v => 
+        v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')
+      );
+      const trailerHtml = trailer 
+        ? `<a href="https://www.youtube.com/watch?v=${trailer.key}" target="_blank" class="trailer-btn">🎬 Watch Trailer</a>`
+        : '';
+      
       document.getElementById('modalBody').innerHTML = `
         <div class="movie-detail">
           <img class="detail-backdrop" src="${backdropUrl}" alt="${movie.title}" onerror="this.src='https://via.placeholder.com/600x340?text=${encodeURIComponent(movie.title)}'">
@@ -1713,6 +1741,7 @@
             <span class="rating">⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}</span>
             <span>${movie.release_date ? movie.release_date.split('-')[0] : 'N/A'}</span>
             <span>${movie.runtime ? movie.runtime + ' min' : ''}</span>
+            ${trailerHtml}
           </div>
           <div class="detail-overview">${movie.overview || 'No overview available.'}</div>
           ${actionHtml}
