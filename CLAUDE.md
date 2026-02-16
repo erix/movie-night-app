@@ -44,7 +44,7 @@ Movie Night is a family movie voting app with a Stremio addon integration. The f
 ### Users
 
 4 family members with optional PIN protection:
-- Erik, Timea, Jázmin, Niki
+- 4 configurable family members
 
 ### Weekly Phases
 
@@ -80,7 +80,7 @@ Local `.env` file (not committed):
 PORT=3000
 TMDB_API_KEY=<from 1Password: op://ClawdBot/TMDB API Key/credential>
 MDBLIST_API_KEY=<from 1Password: op://ClawdBot/MDBList API Key/credential>
-MDBLIST_LIST_ID=erix/movie-night
+MDBLIST_LIST_ID=<your-list-id>
 ```
 
 **Get secrets from 1Password:**
@@ -118,7 +118,7 @@ kubectl exec $(kubectl get pod -l app=movie-night -o jsonpath='{.items[0].metada
 3. **Commit & push** → `git add . && git commit -m "..." && git push`
 4. **GitHub Actions** → Auto-bumps version in `k8s/deployment.yaml`
 5. **FluxCD** → Detects change, deploys to K8s (1-minute sync)
-6. **Production live** → https://movies.erix-homelab.site
+6. **Production live** → https://<your-domain>
 
 ### Manual Flux Reconciliation
 
@@ -145,8 +145,8 @@ kubectl exec <pod> -- wget -qO- http://localhost:3000/manifest.json
 
 ## Production URLs
 
-- **Web UI:** https://movies.erix-homelab.site
-- **Stremio Addon:** https://movies.erix-homelab.site/manifest.json
+- **Web UI:** https://<your-domain>
+- **Stremio Addon:** https://<your-domain>/manifest.json
 
 ## Stremio Addon Endpoints
 
@@ -164,7 +164,7 @@ kubectl exec <pod> -- wget -qO- http://localhost:3000/manifest.json
 k8s/
 ├── deployment.yaml      # Main deployment (git-clone init container)
 ├── service.yaml         # ClusterIP service on port 3000
-├── ingress.yaml         # Traefik ingress (movies.erix-homelab.site)
+├── ingress.yaml         # Traefik ingress (<your-domain>)
 ├── pvc.yaml             # PersistentVolumeClaim for data.json
 ├── sealed-secret.yaml   # Encrypted secrets (TMDB, MDBList keys)
 └── kustomization.yaml   # Kustomize config
@@ -179,7 +179,7 @@ k8s/
 kubectl create secret generic movie-night-secrets \
   --from-literal=tmdb-api-key=<key> \
   --from-literal=mdblist-api-key=<key> \
-  --from-literal=mdblist-list-id=erix/movie-night \
+  --from-literal=mdblist-list-id=<your-list-id> \
   --dry-run=client -o yaml | kubeseal --format yaml > k8s/sealed-secret.yaml
 ```
 
