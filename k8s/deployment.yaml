@@ -72,6 +72,18 @@ spec:
             secretKeyRef:
               name: movie-night-secrets
               key: mdblist-list-id
+        - name: TELEGRAM_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: movie-night-secrets
+              key: telegram-bot-token
+              optional: true
+        - name: TELEGRAM_GROUP_ID
+          valueFrom:
+            secretKeyRef:
+              name: movie-night-secrets
+              key: telegram-group-id
+              optional: true
         - name: DATA_DIR
           value: "/data"
         volumeMounts:
