@@ -78,15 +78,15 @@ http://192.168.1.100:3000/manifest.json
 Local `.env` file (not committed):
 ```
 PORT=3000
-TMDB_API_KEY=<from 1Password: op://ClawdBot/TMDB API Key/credential>
-MDBLIST_API_KEY=<from 1Password: op://ClawdBot/MDBList API Key/credential>
+TMDB_API_KEY=<from 1Password: op://<vault>/<item>/credential>
+MDBLIST_API_KEY=<from 1Password: op://<vault>/<item>/credential>
 MDBLIST_LIST_ID=<your-list-id>
 ```
 
 **Get secrets from 1Password:**
 ```bash
-op read "op://ClawdBot/TMDB API Key/credential"
-op read "op://ClawdBot/MDBList API Key/credential"
+op read "op://<vault>/<item>/credential"
+op read "op://<vault>/<item>/credential"
 ```
 
 ### 3. Data Files
