@@ -84,6 +84,24 @@ spec:
               name: movie-night-telegram
               key: telegram-group-id
               optional: true
+        - name: TRAKT_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: movie-night-telegram
+              key: trakt-client-id
+              optional: true
+        - name: TRAKT_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: movie-night-telegram
+              key: trakt-client-secret
+              optional: true
+        - name: TRAKT_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: movie-night-telegram
+              key: trakt-encryption-key
+              optional: true
         - name: DATA_DIR
           value: "/data"
         volumeMounts:
