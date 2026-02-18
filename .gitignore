@@ -10,3 +10,6 @@ k8s/secret.yaml
 k8s/*-secret.yaml
 !k8s/sealed-secret.yaml
 k8s/telegram-secret.yaml
+movie-night.db
+movie-night.db-shm
+movie-night.db-wal

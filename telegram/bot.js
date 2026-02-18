@@ -37,6 +37,8 @@ const initBot = (helpers) => {
     await ctx.reply(
       `🎬 *Movie Night Commands*\n\n` +
       `/nominate <movie> - Search and nominate a movie\n` +
+      `/watchlist - Nominate from your Trakt watchlist\n` +
+      `/link - Link your Trakt account\n` +
       `/mynomination - View/change your nomination\n` +
       `/vote - Vote on nominated movies\n` +
       `/status - Current phase and countdown\n` +
@@ -447,6 +449,151 @@ const initBot = (helpers) => {
     );
   });
 
+  // /link command - link Trakt account via device flow
+  bot.command('link', async (ctx) => {
+    if (!process.env.TRAKT_CLIENT_ID) {
+      await ctx.reply('❌ Trakt integration not configured.');
+      return;
+    }
+
+    const telegramUser = getTelegramUserName(ctx);
+    const data = dataHelpers.readData();
+    const familyUser = findFamilyUser(telegramUser, data);
+
+    if (!familyUser) {
+      await ctx.reply('❌ Your Telegram isn\'t linked to a family account.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:${process.env.PORT || 3000}/api/trakt/link/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: familyUser })
+      });
+      const data = await res.json();
+
+      await ctx.reply(
+        `🎬 *Link your Trakt account, ${familyUser}!*\n\n` +
+        `1. Go to: ${data.verification_url}\n` +
+        `2. Enter code: \`${data.user_code}\`\n\n` +
+        `_Code expires in ${Math.round(data.expires_in / 60)} minutes_`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (e) {
+      await ctx.reply('❌ Failed to start Trakt linking. Try again.');
+    }
+  });
+
+  // /watchlist command - show Trakt watchlist with nominate buttons
+  bot.command('watchlist', async (ctx) => {
+    const telegramUser = getTelegramUserName(ctx);
+    const data = dataHelpers.readData();
+    const familyUser = findFamilyUser(telegramUser, data);
+
+    if (!familyUser) {
+      await ctx.reply('❌ Your Telegram isn\'t linked to a family account.');
+      return;
+    }
+
+    if (!process.env.TRAKT_CLIENT_ID) {
+      await ctx.reply('❌ Trakt integration not configured.');
+      return;
+    }
+
+    try {
+      // Check if linked
+      const statusRes = await fetch(`http://localhost:${process.env.PORT || 3000}/api/trakt/status/${encodeURIComponent(familyUser)}`);
+      const status = await statusRes.json();
+
+      if (!status.linked) {
+        await ctx.reply(
+          `🎬 *Link your Trakt account first!*\n\nUse /link to connect Trakt.`,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      await ctx.reply('⏳ Fetching your watchlist...');
+
+      const res = await fetch(`http://localhost:${process.env.PORT || 3000}/api/trakt/watchlist/${encodeURIComponent(familyUser)}`);
+      const watchlist = await res.json();
+
+      if (!watchlist.length) {
+        await ctx.reply('Your Trakt watchlist is empty! Add movies at trakt.tv');
+        return;
+      }
+
+      const phase = dataHelpers.getCurrentPhase();
+      const appData = dataHelpers.readData();
+      const myNomination = appData.currentWeek.nominations.find(n => n.proposedBy === familyUser);
+
+      let msg = `🎬 *Your Trakt Watchlist* (@${status.username})\n\n`;
+      const keyboard = new InlineKeyboard();
+
+      const topMovies = watchlist.slice(0, 8);
+      topMovies.forEach((entry, i) => {
+        const movie = entry.movie;
+        msg += `${i + 1}. *${movie.title}* (${movie.year || '?'})\n`;
+      });
+
+      if (phase === 'nomination' && !myNomination) {
+        msg += `\n_Tap to nominate one for this week:_`;
+        topMovies.forEach((entry, i) => {
+          const movie = entry.movie;
+          const tmdbId = movie.ids?.tmdb;
+          if (tmdbId) {
+            keyboard.text(movie.title.substring(0, 25), `wl-nom:${tmdbId}`);
+            keyboard.row();
+          }
+        });
+      } else if (myNomination) {
+        msg += `\n_You already nominated: ${myNomination.title}_`;
+      } else {
+        msg += `\n_Nominations open Monday_`;
+      }
+
+      await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+    } catch (e) {
+      console.error('Watchlist error:', e);
+      await ctx.reply('❌ Failed to load watchlist. Try again.');
+    }
+  });
+
+  // Handle watchlist nominate button
+  bot.callbackQuery(/^wl-nom:(\d+)$/, async (ctx) => {
+    const tmdbId = parseInt(ctx.match[1]);
+    const telegramUser = getTelegramUserName(ctx);
+    const data = dataHelpers.readData();
+    const familyUser = findFamilyUser(telegramUser, data);
+
+    if (!familyUser) {
+      await ctx.answerCallbackQuery({ text: '❌ Account not linked', show_alert: true });
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:${process.env.PORT || 3000}/api/nominate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tmdbId, user: familyUser })
+      });
+      const result = await res.json();
+
+      if (result.error) {
+        await ctx.answerCallbackQuery({ text: `❌ ${result.error}`, show_alert: true });
+        return;
+      }
+
+      await ctx.editMessageText(
+        `✅ *${familyUser}* nominated *${result.title}* from their Trakt watchlist!`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (e) {
+      await ctx.answerCallbackQuery({ text: '❌ Failed to nominate', show_alert: true });
+    }
+  });
+
   // /whoami command - check account linking
   bot.command('whoami', async (ctx) => {
     const telegramUser = getTelegramUserName(ctx);
@@ -614,7 +761,7 @@ const findFamilyUser = (telegramUser, data) => {
   return match || null;
 };
 
-// TMDB search
+// TMDB search - filter for digitally available movies
 const searchTMDB = async (query) => {
   const apiKey = process.env.TMDB_API_KEY;
   if (!apiKey) throw new Error('TMDB_API_KEY not configured');
@@ -622,7 +769,41 @@ const searchTMDB = async (query) => {
   const url = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false`;
   const res = await fetch(url);
   const json = await res.json();
-  return json.results || [];
+  const movies = json.results || [];
+  
+  // Check actual digital release dates for top 5 results
+  const today = new Date();
+  const availableMovies = [];
+  
+  for (const movie of movies.slice(0, 5)) {
+    try {
+      const releaseRes = await fetch(
+        `https://api.themoviedb.org/3/movie/${movie.id}/release_dates?api_key=${apiKey}`
+      );
+      const releaseData = await releaseRes.json();
+      
+      // Check for digital (4), physical (5), or TV (6) release
+      const hasDigitalRelease = (releaseData.results || []).some(country => {
+        return country.release_dates.some(release => {
+          const releaseType = release.type;
+          const releaseDate = new Date(release.release_date);
+          return [4, 5, 6].includes(releaseType) && releaseDate <= today;
+        });
+      });
+      
+      if (hasDigitalRelease) {
+        availableMovies.push(movie);
+      }
+    } catch (e) {
+      // Fallback: include if released 60+ days ago
+      if (movie.release_date) {
+        const daysSince = (today - new Date(movie.release_date)) / (1000 * 60 * 60 * 24);
+        if (daysSince > 60) availableMovies.push(movie);
+      }
+    }
+  }
+  
+  return availableMovies;
 };
 
 // Fetch single movie from TMDB

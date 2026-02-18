@@ -14,6 +14,11 @@
       box-sizing: border-box;
     }
 
+    html, body {
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       background: #141414;
@@ -132,19 +137,26 @@
     .pin-pad {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 15px;
-      max-width: 300px;
+      gap: 12px;
+      max-width: 280px;
       margin: 0 auto;
     }
 
     .pin-btn {
-      padding: 20px;
-      font-size: 2em;
+      aspect-ratio: 1;
+      font-size: 1.6em;
+      font-weight: 500;
       background: rgba(255,255,255,0.1);
       border: 2px solid rgba(255,255,255,0.2);
       border-radius: 8px;
       cursor: pointer;
-      transition: all 0.3s;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      color: #fff;
+      width: 100%;
     }
 
     .pin-btn:hover {
@@ -153,11 +165,14 @@
     }
 
     .pin-btn:active {
-      transform: scale(0.95);
+      transform: scale(0.93);
+      background: rgba(229, 9, 20, 0.3);
     }
 
     .pin-btn.wide {
       grid-column: span 3;
+      aspect-ratio: auto;
+      padding: 14px;
     }
 
     .setup-link {
@@ -823,6 +838,51 @@
       color: #fff;
     }
 
+    /* Trakt Integration */
+    .trakt-link-prompt {
+      text-align: center;
+      padding: 60px 20px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .trakt-logo {
+      font-size: 4em;
+      margin-bottom: 20px;
+    }
+
+    .trakt-link-prompt h3 {
+      font-size: 1.4em;
+      margin-bottom: 10px;
+    }
+
+    .trakt-link-prompt p {
+      color: #999;
+      line-height: 1.6;
+      margin-bottom: 30px;
+    }
+
+    .trakt-link-btn {
+      padding: 14px 30px;
+      background: #e50914;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 1.1em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .trakt-link-btn:hover { background: #ff1a1a; }
+
+    .trakt-user {
+      font-size: 0.6em;
+      color: #e50914;
+      font-weight: normal;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+
     .change-nomination-btn {
       display: block;
       margin: 15px auto 0;
@@ -927,9 +987,8 @@
       }
 
       .pin-btn {
-        padding: 25px;
-        font-size: 2em;
-        min-height: 70px;
+        font-size: 1.8em;
+        min-height: unset;
       }
 
       /* User cards mobile */
@@ -1010,12 +1069,18 @@
 
       /* Tabs */
       .tabs {
-        gap: 10px;
+        gap: 5px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 2px;
+        flex-wrap: nowrap;
       }
 
       .tab {
-        padding: 12px 20px;
-        font-size: 1em;
+        padding: 10px 14px;
+        font-size: 0.9em;
+        white-space: nowrap;
+        flex-shrink: 0;
       }
 
       /* History */
@@ -1066,6 +1131,7 @@
       <button class="tab active" onclick="switchTab('current')">This Week</button>
       <button class="tab" onclick="switchTab('history')">Previous Weeks</button>
       <button class="tab" onclick="switchTab('myratings')">My Ratings</button>
+      <button class="tab" id="watchlistTab" onclick="switchTab('watchlist')">🎬 Watchlist</button>
     </div>
 
     <div id="currentTab" class="tab-content active">
@@ -1079,6 +1145,10 @@
 
     <div id="myRatingsTab" class="tab-content">
       <div id="myRatingsContent"></div>
+    </div>
+
+    <div id="watchlistTabContent" class="tab-content">
+      <div id="watchlistContent"></div>
     </div>
   </div>
 
@@ -1858,7 +1928,164 @@
         document.querySelectorAll('.tab')[2].classList.add('active');
         document.getElementById('myRatingsTab').classList.add('active');
         loadMyRatings();
+      } else if (tab === 'watchlist') {
+        document.querySelectorAll('.tab')[3].classList.add('active');
+        document.getElementById('watchlistTabContent').classList.add('active');
+        loadWatchlist();
       }
+    }
+
+    // ── Trakt Watchlist ────────────────────────────────────────────────────────
+
+    async function loadWatchlist() {
+      const container = document.getElementById('watchlistContent');
+      container.innerHTML = '<div class="waiting-message">Loading...</div>';
+
+      if (!currentUser) {
+        container.innerHTML = '<div class="waiting-message">Select your name to see your watchlist</div>';
+        return;
+      }
+
+      // Check if Trakt is linked
+      const statusRes = await fetch(`/api/trakt/status/${encodeURIComponent(currentUser)}`);
+      const status = await statusRes.json();
+
+      if (!status.linked) {
+        container.innerHTML = `
+          <div class="section-title">🎬 My Trakt Watchlist</div>
+          <div class="trakt-link-prompt">
+            <div class="trakt-logo">🎬</div>
+            <h3>Link your Trakt account</h3>
+            <p>Save movies to your Trakt watchlist throughout the week, then nominate directly from here.</p>
+            <button class="trakt-link-btn" onclick="linkTrakt()">Link Trakt Account</button>
+          </div>
+        `;
+        return;
+      }
+
+      // Fetch watchlist
+      const res = await fetch(`/api/trakt/watchlist/${encodeURIComponent(currentUser)}`);
+      const watchlist = await res.json();
+
+      if (watchlist.error) {
+        container.innerHTML = `
+          <div class="section-title">🎬 My Trakt Watchlist</div>
+          <div class="waiting-message">Failed to load watchlist: ${watchlist.error}<br><br>
+            <button class="change-nomination-btn" onclick="unlinkTrakt()">Unlink Trakt</button>
+          </div>`;
+        return;
+      }
+
+      if (!watchlist.length) {
+        container.innerHTML = `
+          <div class="section-title">🎬 My Trakt Watchlist <span class="trakt-user">@${status.username}</span></div>
+          <div class="waiting-message">Your watchlist is empty.<br>Add movies on <a href="https://trakt.tv" target="_blank">trakt.tv</a> and they'll appear here.</div>
+        `;
+        return;
+      }
+
+      const phase = state?.phase;
+      const myNomination = state?.nominations?.find(n => n.proposedBy === currentUser);
+
+      container.innerHTML = `
+        <div class="section-title">🎬 My Trakt Watchlist <span class="trakt-user">@${status.username} · ${watchlist.length} movies</span></div>
+        <div class="nominations-grid">
+          ${watchlist.map(entry => {
+            const movie = entry.movie;
+            const tmdbId = movie.ids?.tmdb;
+            const posterUrl = movie.poster_path
+              ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+              : `https://via.placeholder.com/300x450?text=${encodeURIComponent(movie.title)}`;
+
+            let actionBtn = '';
+            if (phase === 'nomination' && !myNomination && tmdbId) {
+              actionBtn = `<button class="nominate-btn" style="padding:8px;font-size:0.9em;margin-top:8px" onclick="nominateTraktMovie(${tmdbId}, event)">+ Nominate</button>`;
+            } else if (phase === 'nomination' && myNomination) {
+              actionBtn = `<div style="font-size:0.8em;color:#666;margin-top:6px">Already nominated</div>`;
+            }
+
+            return `
+              <div class="nomination-card" onclick="showMovieDetail(${tmdbId})" style="cursor:pointer">
+                <img class="nomination-backdrop" src="${posterUrl}" alt="${movie.title}"
+                  style="height:180px;object-fit:cover"
+                  onerror="this.src='https://via.placeholder.com/300x180?text=${encodeURIComponent(movie.title)}'">
+                <div class="nomination-info" onclick="showMovieDetail(${tmdbId})">
+                  <div class="nomination-title">${movie.title}</div>
+                  <div class="nomination-meta">
+                    <span>${movie.year || ''}</span>
+                  </div>
+                  ${actionBtn}
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+        <div style="text-align:center;margin-top:20px;padding-bottom:30px">
+          <button onclick="unlinkTrakt()" style="background:none;border:none;color:#555;font-size:0.8em;cursor:pointer;text-decoration:underline;">Unlink Trakt account</button>
+        </div>
+      `;
+    }
+
+    // Start Trakt device link flow
+    async function linkTrakt() {
+      const res = await fetch('/api/trakt/link/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: currentUser })
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+
+      // Show the code in a modal
+      document.getElementById('modalTitle').textContent = 'Link Trakt Account';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="text-align:center;padding:30px">
+          <p style="color:#999;margin-bottom:20px">Go to this URL and enter the code:</p>
+          <a href="${data.verification_url}" target="_blank" style="color:#e50914;font-size:1.1em">${data.verification_url}</a>
+          <div style="font-size:3em;font-weight:bold;letter-spacing:8px;margin:30px 0;color:#fff">${data.user_code}</div>
+          <p id="traktLinkStatus" style="color:#999">Waiting for approval...</p>
+          <button class="change-nomination-btn" onclick="closeModal()">Cancel</button>
+        </div>
+      `;
+      document.getElementById('modal').classList.add('active');
+
+      // Poll for completion
+      const poll = setInterval(async () => {
+        const s = await fetch(`/api/trakt/link/status/${encodeURIComponent(currentUser)}`);
+        const st = await s.json();
+        if (st.linked) {
+          clearInterval(poll);
+          document.getElementById('traktLinkStatus').textContent = `✅ Linked as @${st.username}!`;
+          setTimeout(() => { closeModal(); loadWatchlist(); }, 1500);
+        }
+      }, 3000);
+
+      // Stop polling after expiry
+      setTimeout(() => clearInterval(poll), data.expires_in * 1000);
+    }
+
+    // Unlink Trakt
+    async function unlinkTrakt() {
+      if (!confirm('Unlink your Trakt account?')) return;
+      await fetch('/api/trakt/unlink', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: currentUser })
+      });
+      loadWatchlist();
+    }
+
+    // Nominate directly from Trakt watchlist
+    async function nominateTraktMovie(tmdbId, event) {
+      event.stopPropagation();
+      const response = await fetch('/api/nominate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tmdbId, user: currentUser })
+      });
+      const result = await response.json();
+      if (result.error) { alert(result.error); return; }
+      loadState();
+      loadWatchlist();
     }
 
     // Render history

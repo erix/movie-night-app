@@ -10,8 +10,15 @@ const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 
+// SQLite DB
+const db = require('./db/database');
+
 app.use(express.json());
 app.use(express.static('public'));
+
+// Trakt routes (after middleware)
+const traktAuth = require('./trakt/auth');
+traktAuth.registerRoutes(app);
 
 // CORS for Stremio
 app.use((req, res, next) => {
@@ -275,22 +282,36 @@ app.get('/api/browse/:category', async (req, res) => {
     mystery: 9648
   };
   
-  const endpoints = {
-    trending: '/trending/movie/week',
-    popular: '/movie/popular',
-    topRated: '/movie/top_rated',
-    nowPlaying: '/movie/now_playing',
-    upcoming: '/movie/upcoming'
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Use TMDb's release type filter: 4=Digital, 5=Physical, 6=TV
+  // This filters for movies that have actual digital/physical/TV releases
+  const baseDiscover = `https://api.themoviedb.org/3/discover/movie?api_key=${process.env.TMDB_API_KEY}&with_release_type=4|5|6&release_date.lte=${today}&region=DE`;
+  
+  const categoryParams = {
+    trending: `&sort_by=popularity.desc&vote_count.gte=50`,
+    popular: `&sort_by=popularity.desc&vote_count.gte=20`,
+    topRated: `&sort_by=vote_average.desc&vote_count.gte=100`,
+    nowPlaying: `&sort_by=release_date.desc&vote_count.gte=10`,
+    action: `&with_genres=${genreIds.action}&sort_by=popularity.desc`,
+    comedy: `&with_genres=${genreIds.comedy}&sort_by=popularity.desc`,
+    drama: `&with_genres=${genreIds.drama}&sort_by=popularity.desc`,
+    horror: `&with_genres=${genreIds.horror}&sort_by=popularity.desc`,
+    scifi: `&with_genres=${genreIds.scifi}&sort_by=popularity.desc`,
+    thriller: `&with_genres=${genreIds.thriller}&sort_by=popularity.desc`,
+    romance: `&with_genres=${genreIds.romance}&sort_by=popularity.desc`,
+    animation: `&with_genres=${genreIds.animation}&sort_by=popularity.desc`,
+    documentary: `&with_genres=${genreIds.documentary}&sort_by=popularity.desc`,
+    family: `&with_genres=${genreIds.family}&sort_by=popularity.desc`,
+    fantasy: `&with_genres=${genreIds.fantasy}&sort_by=popularity.desc`,
+    mystery: `&with_genres=${genreIds.mystery}&sort_by=popularity.desc`
   };
   
-  let url = '';
-  if (endpoints[category]) {
-    url = `https://api.themoviedb.org/3${endpoints[category]}?api_key=${process.env.TMDB_API_KEY}`;
-  } else if (genreIds[category]) {
-    url = `https://api.themoviedb.org/3/discover/movie?api_key=${process.env.TMDB_API_KEY}&with_genres=${genreIds[category]}&sort_by=popularity.desc`;
-  } else {
+  if (!categoryParams[category]) {
     return res.status(400).json({ error: 'Invalid category' });
   }
+  
+  const url = baseDiscover + categoryParams[category];
   
   try {
     const response = await fetch(url);
@@ -301,7 +322,7 @@ app.get('/api/browse/:category', async (req, res) => {
   }
 });
 
-// Search TMDb
+// Search TMDb - filter for digitally available movies
 app.get('/api/search', async (req, res) => {
   const { query } = req.query;
   if (!query || !process.env.TMDB_API_KEY) {
@@ -313,7 +334,48 @@ app.get('/api/search', async (req, res) => {
       `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(query)}`
     );
     const data = await response.json();
-    res.json(data.results || []);
+    const movies = data.results || [];
+    
+    // Check each movie for digital release availability
+    const today = new Date();
+    const availableMovies = [];
+    
+    // Check release dates for top 10 results (to avoid too many API calls)
+    const moviesToCheck = movies.slice(0, 10);
+    
+    for (const movie of moviesToCheck) {
+      try {
+        const releaseResponse = await fetch(
+          `https://api.themoviedb.org/3/movie/${movie.id}/release_dates?api_key=${process.env.TMDB_API_KEY}`
+        );
+        const releaseData = await releaseResponse.json();
+        
+        // Check for digital (4), physical (5), or TV (6) release in any country
+        const hasDigitalRelease = (releaseData.results || []).some(country => {
+          return country.release_dates.some(release => {
+            const releaseType = release.type;
+            const releaseDate = new Date(release.release_date);
+            // Type 4=Digital, 5=Physical, 6=TV, and release date is in the past
+            return [4, 5, 6].includes(releaseType) && releaseDate <= today;
+          });
+        });
+        
+        if (hasDigitalRelease) {
+          availableMovies.push(movie);
+        }
+      } catch (e) {
+        // If release check fails, include movie anyway (fallback)
+        if (movie.release_date) {
+          const releaseDate = new Date(movie.release_date);
+          const daysSinceRelease = (today - releaseDate) / (1000 * 60 * 60 * 24);
+          if (daysSinceRelease > 60) {
+            availableMovies.push(movie);
+          }
+        }
+      }
+    }
+    
+    res.json(availableMovies);
   } catch (error) {
     res.status(500).json({ error: 'Search failed' });
   }
@@ -884,6 +946,46 @@ app.get('/meta/:type/:id.json', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch movie metadata' });
   }
 });
+
+// ─── Watch History API ────────────────────────────────────────────────────────
+
+// Mark a movie as watched (and optionally sync to Trakt)
+app.post('/api/watched', async (req, res) => {
+  const { user, tmdbId, title, week } = req.body;
+  if (!user || !tmdbId) return res.status(400).json({ error: 'Missing user or tmdbId' });
+
+  try {
+    db.markWatched(user, tmdbId, title, week);
+
+    // Sync to Trakt if linked
+    const auth = db.getTraktAuth(user);
+    if (auth) {
+      const traktApi = require('./trakt/api');
+      await traktApi.markWatched(user, tmdbId).catch(e => {
+        console.log(`Trakt sync failed for ${user}: ${e.message}`);
+      });
+    }
+
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Check if user has watched a movie
+app.get('/api/watched/:user/:tmdbId', (req, res) => {
+  const { user, tmdbId } = req.params;
+  const watched = db.hasWatched(user, parseInt(tmdbId));
+  res.json({ watched });
+});
+
+// Get full watch history for a user
+app.get('/api/watched/:user', (req, res) => {
+  const history = db.getWatchHistory(req.params.user);
+  res.json(history);
+});
+
+// ─── Data helpers for Telegram bot integration ────────────────────────────────
 
 // Data helpers for Telegram bot integration
 const dataHelpers = {
