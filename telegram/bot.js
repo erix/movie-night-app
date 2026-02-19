@@ -2,12 +2,13 @@
 const { Bot, InlineKeyboard } = require('grammy');
 const fetch = require('node-fetch');
 
-let dataHelpers = null;
+// Use compatibility layer for data access
+const dataHelpers = require('./data-compat');
+
 let bot = null;
 
-// Initialize the bot with data helpers from server.js
-const initBot = (helpers) => {
-  dataHelpers = helpers;
+// Initialize the bot
+const initBot = () => {
   
   if (!process.env.TELEGRAM_BOT_TOKEN) {
     console.log('⚠️ TELEGRAM_BOT_TOKEN not set - Telegram bot disabled');
