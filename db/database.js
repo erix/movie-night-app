@@ -251,16 +251,93 @@ const removeTraktAuth = (userName) => {
   return getDb().prepare('DELETE FROM trakt_auth WHERE user_id = ?').run(user.id);
 };
 
+// ─── Week Results / History ──────────────────────────────────────────────────
+
+const getWeekResults = (week) => {
+  return getDb().prepare('SELECT * FROM week_results WHERE week = ?').get(week);
+};
+
+const getAllWeekResults = () => {
+  return getDb().prepare('SELECT * FROM week_results ORDER BY week DESC').all();
+};
+
+const saveWeekResults = (week, firstPlaceTmdb, firstPlaceTitle, secondPlaceTmdb, secondPlaceTitle) => {
+  return getDb().prepare(`
+    INSERT INTO week_results (week, first_place_tmdb, first_place_title, second_place_tmdb, second_place_title)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(week) DO UPDATE SET
+      first_place_tmdb = excluded.first_place_tmdb,
+      first_place_title = excluded.first_place_title,
+      second_place_tmdb = excluded.second_place_tmdb,
+      second_place_title = excluded.second_place_title,
+      finalized_at = CURRENT_TIMESTAMP
+  `).run(week, firstPlaceTmdb, firstPlaceTitle, secondPlaceTmdb, secondPlaceTitle);
+};
+
+// ─── Additional Helpers ──────────────────────────────────────────────────────
+
+const getNominationById = (id) => {
+  return getDb().prepare(`
+    SELECT n.*, u.name AS proposed_by_name 
+    FROM nominations n
+    JOIN users u ON n.proposed_by = u.id
+    WHERE n.id = ?
+  `).get(id);
+};
+
+const getUsersAsObject = () => {
+  const users = getUsers();
+  const obj = {};
+  users.forEach(u => {
+    obj[u.name] = { icon: u.icon, pin: u.pin };
+  });
+  return obj;
+};
+
+const getVotesAsObject = (week) => {
+  const nominations = getNominations(week);
+  const votes = {};
+  nominations.forEach(nom => {
+    const nomVotes = getDb().prepare(`
+      SELECT u.name FROM votes v
+      JOIN users u ON v.user_id = u.id
+      WHERE v.nomination_id = ?
+    `).all(nom.id);
+    votes[nom.id] = {};
+    nomVotes.forEach(v => {
+      votes[nom.id][v.name] = true;
+    });
+  });
+  return votes;
+};
+
+const updateWatchRating = (userName, tmdbId, rating) => {
+  const user = getUserByName(userName);
+  if (!user) throw new Error(`User not found: ${userName}`);
+  return getDb().prepare(`
+    UPDATE watch_history SET rating = ? WHERE user_id = ? AND tmdb_id = ?
+  `).run(rating, user.id, tmdbId);
+};
+
+const getWatchRating = (userName, tmdbId) => {
+  const user = getUserByName(userName);
+  if (!user) return null;
+  const row = getDb().prepare('SELECT rating FROM watch_history WHERE user_id = ? AND tmdb_id = ?').get(user.id, tmdbId);
+  return row ? row.rating : null;
+};
+
 module.exports = {
   getDb,
   // Users
-  getUsers, getUserByName, upsertUser, updateUserIcon, updateUserPin,
+  getUsers, getUserByName, upsertUser, updateUserIcon, updateUserPin, getUsersAsObject,
   // Nominations
-  getNominations, getNominationByUser, addNomination, removeNomination,
+  getNominations, getNominationByUser, getNominationById, addNomination, removeNomination,
   // Votes
-  getVotesForWeek, getUserVotes, addVote, removeVote,
+  getVotesForWeek, getUserVotes, addVote, removeVote, getVotesAsObject,
   // Watch history
-  getWatchHistory, hasWatched, markWatched,
+  getWatchHistory, hasWatched, markWatched, updateWatchRating, getWatchRating,
+  // Week results / History
+  getWeekResults, getAllWeekResults, saveWeekResults,
   // Trakt auth
   getTraktAuth, saveTraktAuth, removeTraktAuth,
 };

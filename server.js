@@ -1,16 +1,14 @@
-// Movie Night API Server - Auto-deployed via FluxCD + GitHub Actions
+// Movie Night API Server - SQLite Only (no data.json)
+// Auto-deployed via FluxCD + GitHub Actions
 require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
-const fs = require('fs');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const DATA_FILE = path.join(DATA_DIR, 'data.json');
 
-// SQLite DB
+// SQLite DB - single source of truth
 const db = require('./db/database');
 
 app.use(express.json());
@@ -27,7 +25,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Helper to get current week number
+// ─── Helper Functions ────────────────────────────────────────────────────────
+
+// Get current week number (ISO 8601)
 const getWeekNumber = (d = new Date()) => {
   d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
@@ -36,7 +36,7 @@ const getWeekNumber = (d = new Date()) => {
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 };
 
-// Helper to determine current phase
+// Determine current phase based on day/time
 const getCurrentPhase = () => {
   const now = new Date();
   const day = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
@@ -56,15 +56,13 @@ const getCurrentPhase = () => {
   return 'results';
 };
 
-// Helper to get voting deadline (Friday 18:00)
+// Get voting deadline (Friday 18:00)
 const getVotingDeadline = () => {
   const now = new Date();
   const friday = new Date(now);
   
-  // Find next Friday
   const daysUntilFriday = (5 - now.getDay() + 7) % 7;
   if (daysUntilFriday === 0 && now.getDay() === 5 && now.getHours() >= 18) {
-    // If it's Friday after 18:00, get next Friday
     friday.setDate(now.getDate() + 7);
   } else {
     friday.setDate(now.getDate() + daysUntilFriday);
@@ -74,63 +72,8 @@ const getVotingDeadline = () => {
   return friday.toISOString();
 };
 
-// Helper to read/write data
-const readData = () => JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-const writeData = (data) => fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+// ─── MDBList Integration ─────────────────────────────────────────────────────
 
-// Initialize or migrate data file
-const initData = () => {
-  // Ensure data directory exists
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  
-  // Check if data file exists and is actually a file (not a directory)
-  const fileExists = fs.existsSync(DATA_FILE) && fs.statSync(DATA_FILE).isFile();
-  
-  if (!fileExists) {
-    const initialData = {
-      users: {
-        'Erik': { icon: '👨‍💼', pin: null },
-        'Timea': { icon: '👩‍🦰', pin: null },
-        'Jázmin': { icon: '👧', pin: null },
-        'Niki': { icon: '🧒', pin: null }
-      },
-      currentWeek: {
-        weekNumber: getWeekNumber(),
-        phase: getCurrentPhase(),
-        votingDeadline: getVotingDeadline(),
-        nominations: [],
-        votes: {}
-      },
-      history: []
-    };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2));
-  } else {
-    // Migrate old data to add users section if missing
-    const data = readData();
-    if (!data.users) {
-      data.users = {
-        'Erik': { icon: '👨‍💼', pin: null },
-        'Timea': { icon: '👩‍🦰', pin: null },
-        'Jázmin': { icon: '👧', pin: null },
-        'Niki': { icon: '🧒', pin: null }
-      };
-      writeData(data);
-    }
-    // Add pin field to existing users if missing
-    Object.keys(data.users).forEach(user => {
-      if (!('pin' in data.users[user])) {
-        data.users[user].pin = null;
-      }
-    });
-    writeData(data);
-  }
-};
-
-initData();
-
-// MDBList integration helper
 const addToMDBList = async (tmdbId, imdbId, title) => {
   if (!process.env.MDBLIST_API_KEY || !process.env.MDBLIST_LIST_ID) {
     console.log('MDBList not configured - skipping');
@@ -147,9 +90,7 @@ const addToMDBList = async (tmdbId, imdbId, title) => {
         'Content-Type': 'application/json',
         'apikey': process.env.MDBLIST_API_KEY
       },
-      body: JSON.stringify({
-        items: [movieId]
-      })
+      body: JSON.stringify({ items: [movieId] })
     });
 
     if (response.ok) {
@@ -166,96 +107,95 @@ const addToMDBList = async (tmdbId, imdbId, title) => {
   }
 };
 
-// Check and update phase/week
-const checkAndUpdatePhase = (data) => {
+// ─── Week Transition Logic ───────────────────────────────────────────────────
+
+// Check if we need to archive the previous week's results
+const checkWeekTransition = () => {
   const currentWeek = getWeekNumber();
-  const currentPhase = getCurrentPhase();
   
-  // New week - archive old week and reset
-  if (data.currentWeek.weekNumber !== currentWeek) {
-    if (data.currentWeek.nominations.length > 0) {
-      // Archive the old week
-      const nominations = data.currentWeek.nominations;
-      const voteCounts = {};
-      nominations.forEach(nom => {
-        voteCounts[nom.id] = Object.values(data.currentWeek.votes[nom.id] || {}).filter(v => v).length;
-      });
-      
-      const sorted = nominations.sort((a, b) => voteCounts[b.id] - voteCounts[a.id]);
-      
-      // Add winning movies to MDBList
-      if (sorted[0]) {
-        addToMDBList(sorted[0].tmdbId, sorted[0].imdbId, sorted[0].title);
-      }
-      if (sorted[1]) {
-        addToMDBList(sorted[1].tmdbId, sorted[1].imdbId, sorted[1].title);
-      }
-      
-      data.history.unshift({
-        weekNumber: data.currentWeek.weekNumber,
-        firstPlace: sorted[0] || null,
-        secondPlace: sorted[1] || null,
-        allMovies: nominations,
-        votes: data.currentWeek.votes
-      });
-      
-      // Keep only last 12 weeks
-      if (data.history.length > 12) {
-        data.history = data.history.slice(0, 12);
-      }
-    }
-    
-    // Reset for new week
-    data.currentWeek = {
-      weekNumber: currentWeek,
-      phase: currentPhase,
-      votingDeadline: getVotingDeadline(),
-      nominations: [],
-      votes: {}
-    };
-    
-    writeData(data);
-    return data;
-  }
+  // Get previous week
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  const lastWeek = getWeekNumber(d);
   
-  // Update phase if changed
-  if (data.currentWeek.phase !== currentPhase) {
-    // Auto-advance from nomination to voting if all 4 nominated
-    if (currentPhase === 'nomination' && data.currentWeek.nominations.length === 4) {
-      data.currentWeek.phase = 'voting';
-    } else {
-      data.currentWeek.phase = currentPhase;
-    }
-    writeData(data);
-  }
+  // Check if last week needs archiving
+  const lastWeekResult = db.getWeekResults(lastWeek);
+  if (lastWeekResult) return; // Already archived
   
-  // Check if all 4 nominated - auto-advance to voting
-  if (data.currentWeek.phase === 'nomination' && data.currentWeek.nominations.length === 4) {
-    data.currentWeek.phase = 'voting';
-    writeData(data);
-  }
+  const lastWeekNominations = db.getNominations(lastWeek);
+  if (lastWeekNominations.length === 0) return; // Nothing to archive
   
-  return data;
+  // Sort by vote count and archive
+  const sorted = lastWeekNominations.sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0));
+  const first = sorted[0];
+  const second = sorted[1];
+  
+  // Save results
+  db.saveWeekResults(
+    lastWeek,
+    first?.tmdb_id, first?.title,
+    second?.tmdb_id, second?.title
+  );
+  
+  // Add winners to MDBList
+  if (first) addToMDBList(first.tmdb_id, first.imdb_id, first.title);
+  if (second) addToMDBList(second.tmdb_id, second.imdb_id, second.title);
+  
+  console.log(`📦 Archived week ${lastWeek}: ${first?.title} (1st), ${second?.title} (2nd)`);
 };
+
+// Format nomination for API response
+const formatNomination = (n) => ({
+  id: n.id,
+  tmdbId: n.tmdb_id,
+  title: n.title,
+  year: n.year,
+  posterPath: n.poster_path,
+  backdropPath: n.backdrop_path,
+  overview: n.overview,
+  rating: n.rating,
+  imdbId: n.imdb_id,
+  proposedBy: n.proposed_by_name,
+  proposedAt: n.proposed_at
+});
+
+// ─── API Endpoints ───────────────────────────────────────────────────────────
 
 // Get current state
 app.get('/api/state', (req, res) => {
-  let data = readData();
-  data = checkAndUpdatePhase(data);
+  checkWeekTransition();
+  
+  const week = getWeekNumber();
+  const nominations = db.getNominations(week);
+  let phase = getCurrentPhase();
+  
+  // Auto-advance to voting if all 4 nominated
+  if (phase === 'nomination' && nominations.length === 4) {
+    phase = 'voting';
+  }
+  
   res.json({
-    week: data.currentWeek.weekNumber,
-    phase: data.currentWeek.phase,
-    votingDeadline: data.currentWeek.votingDeadline,
-    nominations: data.currentWeek.nominations,
-    votes: data.currentWeek.votes,
-    users: data.users || {}
+    week,
+    phase,
+    votingDeadline: getVotingDeadline(),
+    nominations: nominations.map(formatNomination),
+    votes: db.getVotesAsObject(week),
+    users: db.getUsersAsObject()
   });
 });
 
 // Get history
 app.get('/api/history', (req, res) => {
-  const data = readData();
-  res.json(data.history);
+  const results = db.getAllWeekResults();
+  
+  // Convert to legacy format for compatibility
+  const history = results.map(r => ({
+    weekNumber: r.week,
+    firstPlace: r.first_place_tmdb ? { tmdbId: r.first_place_tmdb, title: r.first_place_title } : null,
+    secondPlace: r.second_place_tmdb ? { tmdbId: r.second_place_tmdb, title: r.second_place_title } : null
+  }));
+  
+  res.json(history);
 });
 
 // TMDb browse endpoints
@@ -266,26 +206,13 @@ app.get('/api/browse/:category', async (req, res) => {
     return res.status(500).json({ error: 'TMDb API key not configured' });
   }
   
-  // Genre IDs from TMDb
   const genreIds = {
-    action: 28,
-    comedy: 35,
-    crime: 80,
-    drama: 18,
-    thriller: 53,
-    horror: 27,
-    romance: 10749,
-    scifi: 878,
-    fantasy: 14,
-    animation: 16,
-    family: 10751,
-    mystery: 9648
+    action: 28, comedy: 35, crime: 80, drama: 18, thriller: 53,
+    horror: 27, romance: 10749, scifi: 878, fantasy: 14,
+    animation: 16, family: 10751, mystery: 9648
   };
   
   const today = new Date().toISOString().split('T')[0];
-  
-  // Use TMDb's release type filter: 4=Digital, 5=Physical, 6=TV
-  // This filters for movies that have actual digital/physical/TV releases
   const baseDiscover = `https://api.themoviedb.org/3/discover/movie?api_key=${process.env.TMDB_API_KEY}&with_release_type=4|5|6&release_date.lte=${today}&region=DE`;
   
   const categoryParams = {
@@ -301,92 +228,54 @@ app.get('/api/browse/:category', async (req, res) => {
     thriller: `&with_genres=${genreIds.thriller}&sort_by=popularity.desc`,
     romance: `&with_genres=${genreIds.romance}&sort_by=popularity.desc`,
     animation: `&with_genres=${genreIds.animation}&sort_by=popularity.desc`,
-    documentary: `&with_genres=${genreIds.documentary}&sort_by=popularity.desc`,
-    family: `&with_genres=${genreIds.family}&sort_by=popularity.desc`,
-    fantasy: `&with_genres=${genreIds.fantasy}&sort_by=popularity.desc`,
-    mystery: `&with_genres=${genreIds.mystery}&sort_by=popularity.desc`
+    family: `&with_genres=${genreIds.family}&sort_by=popularity.desc`
   };
   
-  if (!categoryParams[category]) {
+  const params = categoryParams[category];
+  if (!params) {
     return res.status(400).json({ error: 'Invalid category' });
   }
   
-  const url = baseDiscover + categoryParams[category];
-  
   try {
-    const response = await fetch(url);
+    const response = await fetch(`${baseDiscover}${params}`);
     const data = await response.json();
     res.json(data.results || []);
   } catch (error) {
-    res.status(500).json({ error: 'Browse failed' });
+    console.error('TMDb browse error:', error);
+    res.status(500).json({ error: 'Failed to fetch movies' });
   }
 });
 
-// Search TMDb - filter for digitally available movies
+// Search movies
 app.get('/api/search', async (req, res) => {
-  const { query } = req.query;
-  if (!query || !process.env.TMDB_API_KEY) {
-    return res.status(400).json({ error: 'Missing query or API key' });
+  const { q } = req.query;
+  
+  if (!q) {
+    return res.status(400).json({ error: 'Search query required' });
   }
-
+  
+  if (!process.env.TMDB_API_KEY) {
+    return res.status(500).json({ error: 'TMDb API key not configured' });
+  }
+  
   try {
     const response = await fetch(
-      `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(query)}`
+      `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(q)}&include_adult=false`
     );
     const data = await response.json();
-    const movies = data.results || [];
-    
-    // Check each movie for digital release availability
-    const today = new Date();
-    const availableMovies = [];
-    
-    // Check release dates for top 10 results (to avoid too many API calls)
-    const moviesToCheck = movies.slice(0, 10);
-    
-    for (const movie of moviesToCheck) {
-      try {
-        const releaseResponse = await fetch(
-          `https://api.themoviedb.org/3/movie/${movie.id}/release_dates?api_key=${process.env.TMDB_API_KEY}`
-        );
-        const releaseData = await releaseResponse.json();
-        
-        // Check for digital (4), physical (5), or TV (6) release in any country
-        const hasDigitalRelease = (releaseData.results || []).some(country => {
-          return country.release_dates.some(release => {
-            const releaseType = release.type;
-            const releaseDate = new Date(release.release_date);
-            // Type 4=Digital, 5=Physical, 6=TV, and release date is in the past
-            return [4, 5, 6].includes(releaseType) && releaseDate <= today;
-          });
-        });
-        
-        if (hasDigitalRelease) {
-          availableMovies.push(movie);
-        }
-      } catch (e) {
-        // If release check fails, include movie anyway (fallback)
-        if (movie.release_date) {
-          const releaseDate = new Date(movie.release_date);
-          const daysSinceRelease = (today - releaseDate) / (1000 * 60 * 60 * 24);
-          if (daysSinceRelease > 60) {
-            availableMovies.push(movie);
-          }
-        }
-      }
-    }
-    
-    res.json(availableMovies);
+    res.json(data.results || []);
   } catch (error) {
+    console.error('TMDb search error:', error);
     res.status(500).json({ error: 'Search failed' });
   }
 });
 
-// Get movie details (for IMDb ID)
+// Get movie details
 app.get('/api/movie/:tmdbId', async (req, res) => {
   const { tmdbId } = req.params;
   
   if (!process.env.TMDB_API_KEY) {
-    return res.status(500).json({ error: 'API key not configured' });
+    return res.status(500).json({ error: 'TMDb API key not configured' });
   }
   
   try {
@@ -396,231 +285,157 @@ app.get('/api/movie/:tmdbId', async (req, res) => {
     const data = await response.json();
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: 'Fetch failed' });
+    console.error('TMDb movie details error:', error);
+    res.status(500).json({ error: 'Failed to fetch movie details' });
   }
 });
 
 // Nominate a movie
 app.post('/api/nominate', async (req, res) => {
   const { tmdbId, user } = req.body;
-  let data = readData();
-  data = checkAndUpdatePhase(data);
   
-  // Check phase
-  if (data.currentWeek.phase !== 'nomination') {
-    return res.status(400).json({ error: 'Not in nomination phase' });
+  if (!tmdbId || !user) {
+    return res.status(400).json({ error: 'Missing tmdbId or user' });
   }
   
-  // Check if user already nominated
-  if (data.currentWeek.nominations.find(n => n.proposedBy === user)) {
+  const week = getWeekNumber();
+  const nominations = db.getNominations(week);
+  
+  // Check if already nominated
+  const existing = db.getNominationByUser(week, user);
+  if (existing) {
     return res.status(400).json({ error: 'You already nominated a movie this week' });
   }
   
-  // Check if movie already nominated
-  if (data.currentWeek.nominations.find(n => n.tmdbId === tmdbId)) {
-    return res.status(400).json({ error: 'Movie already nominated' });
+  // Check if 4 nominations reached
+  if (nominations.length >= 4) {
+    return res.status(400).json({ error: 'Maximum nominations reached' });
   }
   
-  // Fetch movie details
+  // Check if movie already nominated
+  if (nominations.some(n => n.tmdb_id === tmdbId)) {
+    return res.status(400).json({ error: 'Movie already nominated this week' });
+  }
+  
   try {
+    // Fetch movie details from TMDb
     const response = await fetch(
       `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${process.env.TMDB_API_KEY}&append_to_response=external_ids`
     );
     const movie = await response.json();
     
-    const nomination = {
-      id: Date.now().toString(),
-      tmdbId: movie.id,
-      title: movie.title,
-      year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
-      imdbId: movie.external_ids?.imdb_id || null,
-      posterPath: movie.poster_path,
-      backdropPath: movie.backdrop_path,
-      rating: movie.vote_average,
-      overview: movie.overview,
-      proposedBy: user,
-      proposedAt: new Date().toISOString()
-    };
+    db.addNomination(
+      week,
+      tmdbId,
+      movie.title,
+      movie.release_date?.split('-')[0],
+      movie.poster_path,
+      movie.backdrop_path,
+      movie.overview,
+      movie.vote_average,
+      movie.external_ids?.imdb_id,
+      user
+    );
     
-    data.currentWeek.nominations.push(nomination);
-    data.currentWeek.votes[nomination.id] = {};
-    
-    // Auto-advance if all 4 nominated
-    if (data.currentWeek.nominations.length === 4) {
-      data.currentWeek.phase = 'voting';
-    }
-    
-    writeData(data);
-    res.json(nomination);
+    res.json({ success: true, message: `${movie.title} nominated!` });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch movie details' });
+    console.error('Nomination error:', error);
+    res.status(500).json({ error: 'Failed to nominate movie' });
   }
 });
 
-// Withdraw nomination (to change your pick)
+// Withdraw nomination
 app.post('/api/withdraw-nomination', (req, res) => {
   const { user } = req.body;
-  let data = readData();
-  data = checkAndUpdatePhase(data);
   
-  // Only allow during nomination phase
-  if (data.currentWeek.phase !== 'nomination') {
-    return res.status(400).json({ error: 'Can only withdraw during nomination phase' });
+  if (!user) {
+    return res.status(400).json({ error: 'Missing user' });
   }
   
-  // Find and remove user's nomination
-  const nomIndex = data.currentWeek.nominations.findIndex(n => n.proposedBy === user);
+  const week = getWeekNumber();
   
-  if (nomIndex === -1) {
-    return res.status(404).json({ error: 'No nomination found' });
+  try {
+    db.removeNomination(week, user);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-  
-  const removed = data.currentWeek.nominations.splice(nomIndex, 1)[0];
-  writeData(data);
-  
-  res.json({ success: true, removed: removed.title });
 });
 
-// Vote
+// Vote for a movie
 app.post('/api/vote', (req, res) => {
-  const { movieId, user, value } = req.body;
-  let data = readData();
-  data = checkAndUpdatePhase(data);
+  const { nominationId, user, vote } = req.body;
   
-  // Check phase
-  if (data.currentWeek.phase !== 'voting') {
-    return res.status(400).json({ error: 'Not in voting phase' });
+  if (!nominationId || !user) {
+    return res.status(400).json({ error: 'Missing nominationId or user' });
   }
   
-  const movie = data.currentWeek.nominations.find(m => m.id === movieId);
-  if (!movie) {
-    return res.status(404).json({ error: 'Movie not found' });
+  const week = getWeekNumber();
+  
+  // Check nomination exists
+  const nomination = db.getNominationById(nominationId);
+  if (!nomination) {
+    return res.status(400).json({ error: 'Nomination not found' });
   }
   
-  // Can't vote for your own nomination
-  if (movie.proposedBy === user) {
+  // Can't vote for own nomination
+  if (nomination.proposed_by_name === user) {
     return res.status(400).json({ error: "Can't vote for your own nomination" });
   }
   
-  // Set vote
-  if (!data.currentWeek.votes[movieId]) {
-    data.currentWeek.votes[movieId] = {};
+  try {
+    if (vote) {
+      db.addVote(week, nominationId, user);
+    } else {
+      db.removeVote(week, nominationId, user);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-  data.currentWeek.votes[movieId][user] = value;
-  
-  // Validate: each user can only have 2 votes total
-  const userVoteCount = Object.keys(data.currentWeek.votes).reduce((count, mId) => {
-    return count + (data.currentWeek.votes[mId][user] ? 1 : 0);
-  }, 0);
-  
-  if (userVoteCount > 2) {
-    return res.status(400).json({ error: 'You can only vote for 2 movies' });
-  }
-  
-  writeData(data);
-  res.json({ success: true });
 });
 
-// Get current user's vote status
+// Get user votes
 app.get('/api/votes/:user', (req, res) => {
   const { user } = req.params;
-  let data = readData();
-  data = checkAndUpdatePhase(data);
+  const week = getWeekNumber();
   
-  const userVotes = {};
-  Object.keys(data.currentWeek.votes).forEach(movieId => {
-    userVotes[movieId] = data.currentWeek.votes[movieId][user] || false;
-  });
+  const votes = db.getUserVotes(week, user);
+  const votedIds = votes.map(v => v.nomination_id);
   
-  const voteCount = Object.values(userVotes).filter(v => v).length;
-  
-  res.json({
-    votes: userVotes,
-    count: voteCount
-  });
+  res.json(votedIds);
 });
 
-// Add or update rating for a movie
+// Rate a watched movie
 app.post('/api/rate', (req, res) => {
-  const { movieId, user, rating, weekNumber } = req.body;
+  const { tmdbId, user, rating } = req.body;
   
-  if (!user || rating === undefined || (rating < 1 || rating > 5)) {
-    return res.status(400).json({ error: 'Invalid rating (must be 1-5)' });
+  if (!tmdbId || !user || rating === undefined) {
+    return res.status(400).json({ error: 'Missing tmdbId, user, or rating' });
   }
   
-  let data = readData();
-  let movie = null;
-  let targetWeek = null;
-  
-  // Check current week first
-  if (data.currentWeek.weekNumber === weekNumber) {
-    movie = data.currentWeek.nominations.find(m => m.id === movieId);
-    targetWeek = data.currentWeek;
-  } else {
-    // Check history
-    targetWeek = data.history.find(w => w.weekNumber === weekNumber);
-    if (targetWeek) {
-      movie = targetWeek.allMovies.find(m => m.id === movieId);
-    }
+  try {
+    db.updateWatchRating(user, tmdbId, rating);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-  
-  if (!movie) {
-    return res.status(404).json({ error: 'Movie not found' });
-  }
-  
-  // Initialize ratings object if it doesn't exist
-  if (!movie.ratings) {
-    movie.ratings = {};
-  }
-  
-  movie.ratings[user] = rating;
-  writeData(data);
-  
-  // Calculate average
-  const ratings = Object.values(movie.ratings);
-  const average = ratings.length > 0 
-    ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1)
-    : 0;
-  
-  res.json({ 
-    success: true, 
-    ratings: movie.ratings,
-    average: parseFloat(average)
-  });
 });
 
-// Get user's personal ratings
+// Get user ratings
 app.get('/api/user/:user/ratings', (req, res) => {
   const { user } = req.params;
-  const data = readData();
   
-  const ratedMovies = [];
+  const history = db.getWatchHistory(user);
+  const ratings = {};
   
-  // Check current week
-  data.currentWeek.nominations.forEach(movie => {
-    if (movie.ratings && movie.ratings[user]) {
-      ratedMovies.push({
-        ...movie,
-        userRating: movie.ratings[user],
-        weekNumber: data.currentWeek.weekNumber
-      });
+  history.forEach(h => {
+    if (h.rating) {
+      ratings[h.tmdb_id] = h.rating;
     }
   });
   
-  // Check history
-  data.history.forEach(week => {
-    week.allMovies.forEach(movie => {
-      if (movie.ratings && movie.ratings[user]) {
-        ratedMovies.push({
-          ...movie,
-          userRating: movie.ratings[user],
-          weekNumber: week.weekNumber
-        });
-      }
-    });
-  });
-  
-  res.json(ratedMovies);
+  res.json(ratings);
 });
 
 // Update user icon
@@ -631,119 +446,88 @@ app.post('/api/user/icon', (req, res) => {
     return res.status(400).json({ error: 'Missing user or icon' });
   }
   
-  const data = readData();
-  
-  if (!data.users) {
-    data.users = {};
+  try {
+    db.updateUserIcon(user, icon);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: 'User not found' });
   }
-  
-  if (!data.users[user]) {
-    data.users[user] = {};
-  }
-  
-  data.users[user].icon = icon;
-  writeData(data);
-  
-  res.json({ success: true, icon });
 });
 
 // Set user PIN
 app.post('/api/user/pin', (req, res) => {
   const { user, pin } = req.body;
   
-  if (!user || !pin) {
-    return res.status(400).json({ error: 'Missing user or PIN' });
+  if (!user) {
+    return res.status(400).json({ error: 'Missing user' });
   }
   
-  // PIN must be 4 digits
-  if (!/^\d{4}$/.test(pin)) {
-    return res.status(400).json({ error: 'PIN must be 4 digits' });
+  try {
+    db.updateUserPin(user, pin || null);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: 'User not found' });
   }
-  
-  const data = readData();
-  
-  // Check if PIN already used by another user
-  const existingUser = Object.keys(data.users).find(u => u !== user && data.users[u].pin === pin);
-  if (existingUser) {
-    return res.status(400).json({ error: 'PIN already in use' });
-  }
-  
-  if (!data.users[user]) {
-    data.users[user] = { icon: '👤' };
-  }
-  
-  data.users[user].pin = pin;
-  writeData(data);
-  
-  res.json({ success: true });
 });
 
-// Login with PIN
+// Login (verify PIN)
 app.post('/api/login', (req, res) => {
-  const { pin } = req.body;
-  
-  if (!pin) {
-    return res.status(400).json({ error: 'Missing PIN' });
-  }
-  
-  const data = readData();
-  
-  // Find user with this PIN
-  const user = Object.keys(data.users).find(u => data.users[u].pin === pin);
+  const { user, pin } = req.body;
   
   if (!user) {
-    return res.status(401).json({ error: 'Invalid PIN' });
+    return res.status(400).json({ error: 'Missing user' });
   }
   
-  res.json({ 
-    success: true, 
-    user,
-    icon: data.users[user].icon
-  });
+  const dbUser = db.getUserByName(user);
+  if (!dbUser) {
+    return res.status(400).json({ error: 'User not found' });
+  }
+  
+  // No PIN set - allow login
+  if (!dbUser.pin) {
+    return res.json({ success: true });
+  }
+  
+  // Verify PIN
+  if (dbUser.pin === pin) {
+    return res.json({ success: true });
+  }
+  
+  res.status(401).json({ error: 'Invalid PIN' });
 });
 
-// Manually add a movie to MDBList
+// MDBList add
 app.post('/api/mdblist/add', async (req, res) => {
   const { tmdbId, imdbId, title } = req.body;
   
-  if (!tmdbId && !imdbId) {
-    return res.status(400).json({ error: 'Missing tmdbId or imdbId' });
+  if (!tmdbId) {
+    return res.status(400).json({ error: 'Missing tmdbId' });
   }
   
-  const success = await addToMDBList(tmdbId, imdbId, title || 'Unknown');
-  
-  if (success) {
-    res.json({ success: true, message: 'Added to MDBList' });
-  } else {
-    res.status(500).json({ error: 'Failed to add to MDBList' });
-  }
+  const success = await addToMDBList(tmdbId, imdbId, title);
+  res.json({ success });
 });
 
-// Get MDBList configuration status
+// MDBList status
 app.get('/api/mdblist/status', (req, res) => {
   res.json({
     configured: !!(process.env.MDBLIST_API_KEY && process.env.MDBLIST_LIST_ID),
-    listId: process.env.MDBLIST_LIST_ID ? process.env.MDBLIST_LIST_ID.substring(0, 8) + '...' : null
+    listId: process.env.MDBLIST_LIST_ID || null
   });
 });
 
-// ============================================================================
-// Stremio Addon Endpoints
-// ============================================================================
+// ─── Stremio Addon Endpoints ─────────────────────────────────────────────────
 
-// Helper to format movie for Stremio meta preview
-const formatMetaPreview = (movie, metadata = {}) => {
-  return {
-    id: `tmdb:${movie.tmdbId}`,
-    type: 'movie',
-    name: movie.title,
-    poster: movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : undefined,
-    description: movie.overview,
-    ...metadata
-  };
-};
+const formatMetaPreview = (movie, metadata = {}) => ({
+  id: `tmdb:${movie.tmdb_id || movie.tmdbId}`,
+  type: 'movie',
+  name: movie.title,
+  poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
+  description: movie.overview,
+  ...metadata
+});
 
-// Stremio addon manifest
+// Stremio manifest
 app.get('/manifest.json', (req, res) => {
   res.json({
     id: 'family.movie.night',
@@ -753,77 +537,79 @@ app.get('/manifest.json', (req, res) => {
     resources: ['catalog', 'meta'],
     types: ['movie'],
     catalogs: [
-      {
-        type: 'movie',
-        id: 'nominations',
-        name: "This Week's Nominations"
-      },
-      {
-        type: 'movie',
-        id: 'winners',
-        name: 'Movie Night Winners'
-      },
-      {
-        type: 'movie',
-        id: 'watched',
-        name: 'Watched Together'
-      }
+      { type: 'movie', id: 'nominations', name: "This Week's Nominations" },
+      { type: 'movie', id: 'winners', name: 'Movie Night Winners' },
+      { type: 'movie', id: 'watched', name: 'Watched Together' }
     ]
   });
 });
 
-// Stremio catalog endpoint
+// Stremio catalog
 app.get('/catalog/:type/:id.json', (req, res) => {
   const { type, id } = req.params;
-
+  
   if (type !== 'movie') {
     return res.status(400).json({ error: 'Only movie type supported' });
   }
-
-  let data = readData();
-  data = checkAndUpdatePhase(data);
+  
+  const week = getWeekNumber();
   const metas = [];
-
+  
   try {
     if (id === 'nominations') {
-      // Current week's nominations
-      data.currentWeek.nominations.forEach(movie => {
-        metas.push(formatMetaPreview(movie, {
-          description: `${movie.overview}\n\nNominated by: ${movie.proposedBy}`
+      const nominations = db.getNominations(week);
+      nominations.forEach(n => {
+        metas.push(formatMetaPreview(n, {
+          description: `${n.overview}\n\nNominated by: ${n.proposed_by_name}`
         }));
       });
     } else if (id === 'winners') {
-      // Movies that won (first and second place from history)
-      data.history.forEach(week => {
-        if (week.firstPlace) {
-          metas.push(formatMetaPreview(week.firstPlace, {
-            description: `${week.firstPlace.overview}\n\n🏆 First Place - Week ${week.weekNumber}`
-          }));
+      const results = db.getAllWeekResults();
+      results.forEach(r => {
+        if (r.first_place_tmdb) {
+          metas.push({
+            id: `tmdb:${r.first_place_tmdb}`,
+            type: 'movie',
+            name: r.first_place_title,
+            description: `🏆 First Place - Week ${r.week}`
+          });
         }
-        if (week.secondPlace) {
-          metas.push(formatMetaPreview(week.secondPlace, {
-            description: `${week.secondPlace.overview}\n\n🥈 Second Place - Week ${week.weekNumber}`
-          }));
+        if (r.second_place_tmdb) {
+          metas.push({
+            id: `tmdb:${r.second_place_tmdb}`,
+            type: 'movie',
+            name: r.second_place_title,
+            description: `🥈 Second Place - Week ${r.week}`
+          });
         }
       });
     } else if (id === 'watched') {
-      // All watched movies (winners from history)
-      data.history.forEach(week => {
-        if (week.firstPlace) {
-          metas.push(formatMetaPreview(week.firstPlace, {
-            description: `${week.firstPlace.overview}\n\nWatched: Week ${week.weekNumber}`
-          }));
-        }
-        if (week.secondPlace) {
-          metas.push(formatMetaPreview(week.secondPlace, {
-            description: `${week.secondPlace.overview}\n\nWatched: Week ${week.weekNumber}`
-          }));
-        }
+      // Get all users' watch history
+      const users = db.getUsers();
+      const watchedMap = {};
+      
+      users.forEach(u => {
+        const history = db.getWatchHistory(u.name);
+        history.forEach(h => {
+          if (!watchedMap[h.tmdb_id]) {
+            watchedMap[h.tmdb_id] = { ...h, watchers: [] };
+          }
+          watchedMap[h.tmdb_id].watchers.push(u.name);
+        });
+      });
+      
+      Object.values(watchedMap).forEach(w => {
+        metas.push({
+          id: `tmdb:${w.tmdb_id}`,
+          type: 'movie',
+          name: w.title,
+          description: `Watched by: ${w.watchers.join(', ')}`
+        });
       });
     } else {
       return res.status(404).json({ error: 'Catalog not found' });
     }
-
+    
     res.json({ metas });
   } catch (error) {
     console.error('Catalog error:', error);
@@ -831,190 +617,121 @@ app.get('/catalog/:type/:id.json', (req, res) => {
   }
 });
 
-// Stremio meta endpoint
+// Stremio meta
 app.get('/meta/:type/:id.json', async (req, res) => {
   const { type, id } = req.params;
-
+  
   if (type !== 'movie') {
     return res.status(400).json({ error: 'Only movie type supported' });
   }
-
-  // Extract TMDB ID from Stremio ID format (tmdb:12345)
+  
   const tmdbId = id.startsWith('tmdb:') ? id.substring(5) : id;
-
+  
   if (!process.env.TMDB_API_KEY) {
     return res.status(500).json({ error: 'TMDB API key not configured' });
   }
-
+  
   try {
-    // Fetch movie details from TMDB
     const response = await fetch(
       `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${process.env.TMDB_API_KEY}&append_to_response=external_ids,credits`
     );
-
+    
     if (!response.ok) {
       return res.status(404).json({ error: 'Movie not found' });
     }
-
+    
     const movie = await response.json();
-
-    // Get custom metadata from our data
-    const data = readData();
-    let customMeta = {};
-
-    // Check current week nominations
-    const currentNomination = data.currentWeek.nominations.find(n => n.tmdbId.toString() === tmdbId);
-    if (currentNomination) {
-      customMeta.nominatedBy = currentNomination.proposedBy;
-      customMeta.nominatedAt = currentNomination.proposedAt;
-
-      // Get vote counts
-      const voteData = data.currentWeek.votes[currentNomination.id] || {};
-      const voteCount = Object.values(voteData).filter(v => v).length;
-      customMeta.votes = voteCount;
+    const week = getWeekNumber();
+    
+    // Get custom metadata
+    const nominations = db.getNominations(week);
+    const nomination = nominations.find(n => n.tmdb_id.toString() === tmdbId);
+    
+    let customDescription = movie.overview;
+    if (nomination) {
+      customDescription += `\n\n📋 Nominated by: ${nomination.proposed_by_name}`;
+      customDescription += `\n🗳️ Votes: ${nomination.vote_count || 0}`;
     }
-
-    // Check history for winner/watched info
-    data.history.forEach(week => {
-      const isFirstPlace = week.firstPlace && week.firstPlace.tmdbId.toString() === tmdbId;
-      const isSecondPlace = week.secondPlace && week.secondPlace.tmdbId.toString() === tmdbId;
-
-      if (isFirstPlace || isSecondPlace) {
-        customMeta.weekWon = week.weekNumber;
-        customMeta.placement = isFirstPlace ? 'First Place 🏆' : 'Second Place 🥈';
-
-        // Get ratings if available
-        const movieData = isFirstPlace ? week.firstPlace : week.secondPlace;
-        if (movieData.ratings) {
-          const ratings = Object.values(movieData.ratings);
-          const avgRating = ratings.length > 0
-            ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1)
-            : null;
-          if (avgRating) {
-            customMeta.familyRating = `${avgRating}/5 ⭐`;
-          }
-        }
+    
+    res.json({
+      meta: {
+        id: `tmdb:${tmdbId}`,
+        type: 'movie',
+        name: movie.title,
+        poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
+        background: movie.backdrop_path ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}` : undefined,
+        description: customDescription,
+        releaseInfo: movie.release_date?.split('-')[0],
+        imdbRating: movie.vote_average?.toFixed(1),
+        runtime: movie.runtime ? `${movie.runtime} min` : undefined,
+        genres: movie.genres?.map(g => g.name)
       }
     });
-
-    // Format for Stremio
-    const meta = {
-      id: `tmdb:${movie.id}`,
-      type: 'movie',
-      name: movie.title,
-      poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
-      background: movie.backdrop_path ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}` : undefined,
-      logo: movie.backdrop_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
-      description: movie.overview,
-      releaseInfo: movie.release_date ? movie.release_date.split('-')[0] : undefined,
-      runtime: movie.runtime ? `${movie.runtime} min` : undefined,
-      director: movie.credits?.crew?.find(c => c.job === 'Director')?.name,
-      cast: movie.credits?.cast?.slice(0, 5).map(c => c.name),
-      genre: movie.genres?.map(g => g.name),
-      imdbRating: movie.vote_average ? movie.vote_average.toFixed(1) : undefined,
-      links: [
-        movie.external_ids?.imdb_id ? {
-          name: 'IMDb',
-          category: 'imdb',
-          url: `https://www.imdb.com/title/${movie.external_ids.imdb_id}`
-        } : null,
-        {
-          name: 'TMDB',
-          category: 'tmdb',
-          url: `https://www.themoviedb.org/movie/${movie.id}`
-        }
-      ].filter(Boolean)
-    };
-
-    // Add custom metadata to description
-    if (Object.keys(customMeta).length > 0) {
-      const customInfo = [];
-      if (customMeta.nominatedBy) customInfo.push(`Nominated by: ${customMeta.nominatedBy}`);
-      if (customMeta.votes !== undefined) customInfo.push(`Votes: ${customMeta.votes}`);
-      if (customMeta.placement) customInfo.push(customMeta.placement);
-      if (customMeta.familyRating) customInfo.push(`Family Rating: ${customMeta.familyRating}`);
-      if (customMeta.weekWon) customInfo.push(`Week: ${customMeta.weekWon}`);
-
-      if (customInfo.length > 0) {
-        meta.description = `${meta.description}\n\n${customInfo.join(' • ')}`;
-      }
-    }
-
-    res.json({ meta });
   } catch (error) {
-    console.error('Meta fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch movie metadata' });
+    console.error('Meta error:', error);
+    res.status(500).json({ error: 'Failed to fetch meta' });
   }
 });
 
-// ─── Watch History API ────────────────────────────────────────────────────────
+// ─── Watch History Endpoints ─────────────────────────────────────────────────
 
-// Mark a movie as watched (and optionally sync to Trakt)
 app.post('/api/watched', async (req, res) => {
-  const { user, tmdbId, title, week } = req.body;
-  if (!user || !tmdbId) return res.status(400).json({ error: 'Missing user or tmdbId' });
-
+  const { tmdbId, user, title } = req.body;
+  
+  if (!tmdbId || !user) {
+    return res.status(400).json({ error: 'Missing tmdbId or user' });
+  }
+  
+  const week = getWeekNumber();
+  
   try {
     db.markWatched(user, tmdbId, title, week);
-
-    // Sync to Trakt if linked
-    const auth = db.getTraktAuth(user);
-    if (auth) {
-      const traktApi = require('./trakt/api');
-      await traktApi.markWatched(user, tmdbId).catch(e => {
-        console.log(`Trakt sync failed for ${user}: ${e.message}`);
-      });
-    }
-
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 });
 
-// Check if user has watched a movie
 app.get('/api/watched/:user/:tmdbId', (req, res) => {
   const { user, tmdbId } = req.params;
   const watched = db.hasWatched(user, parseInt(tmdbId));
   res.json({ watched });
 });
 
-// Get full watch history for a user
 app.get('/api/watched/:user', (req, res) => {
-  const history = db.getWatchHistory(req.params.user);
-  res.json(history);
+  const { user } = req.params;
+  const history = db.getWatchHistory(user);
+  res.json(history.map(h => h.tmdb_id));
 });
 
-// ─── Data helpers for Telegram bot integration ────────────────────────────────
+// ─── Export for external modules ─────────────────────────────────────────────
 
-// Data helpers for Telegram bot integration
-const dataHelpers = {
-  readData,
-  writeData,
-  getCurrentPhase,
+module.exports = {
   getWeekNumber,
+  getCurrentPhase,
   getVotingDeadline,
-  checkAndUpdatePhase
+  addToMDBList
 };
 
-// Initialize Telegram bot if configured
-if (process.env.TELEGRAM_BOT_TOKEN) {
-  const { initBot, startBot } = require('./telegram/bot');
-  const { initReminders } = require('./telegram/reminders');
-  
-  const bot = initBot(dataHelpers);
-  if (bot) {
-    startBot();
-    initReminders(dataHelpers);
-  }
+// ─── Telegram Bot ────────────────────────────────────────────────────────────
+
+if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_GROUP_ID) {
+  console.log('🤖 Telegram bot enabled');
+  const telegramBot = require('./telegram/bot');
+  telegramBot.initBot();
+  telegramBot.startBot().then(() => {
+    console.log('🤖 Telegram bot started');
+  }).catch(err => {
+    console.error('Failed to start Telegram bot:', err);
+  });
 }
+
+// ─── Start Server ────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
   console.log(`Movie Night app running on http://localhost:${PORT}`);
+  
   if (process.env.MDBLIST_API_KEY && process.env.MDBLIST_LIST_ID) {
     console.log(`✅ MDBList integration enabled (List: ${process.env.MDBLIST_LIST_ID})`);
-  }
-  if (process.env.TELEGRAM_BOT_TOKEN) {
-    console.log(`🤖 Telegram bot enabled`);
   }
 });
