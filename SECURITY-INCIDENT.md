@@ -9,7 +9,7 @@
 The TMDB API key was accidentally committed to the public GitHub repository in `k8s/secret.yaml`.
 
 **Exposed key (base64):** `YTZlODkxYzMxMTA2Zjc0OGVhNzlkMTBkZDJmMTNhZGU=`  
-**Decoded:** `a6e891c3106f748ea79d10dd2f13ade`
+**Decoded:** `[REDACTED - key was rotated]`
 
 ## REMEDIATION COMPLETED
 
