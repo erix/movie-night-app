@@ -8,8 +8,9 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// SQLite DB - single source of truth
-const db = require('./db/database');
+// Data Repository - abstracts persistence layer
+// To switch backends, edit repository/index.js
+const repo = require('./repository');
 
 app.use(express.json());
 app.use(express.static('public'));
@@ -119,10 +120,10 @@ const checkWeekTransition = () => {
   const lastWeek = getWeekNumber(d);
   
   // Check if last week needs archiving
-  const lastWeekResult = db.getWeekResults(lastWeek);
+  const lastWeekResult = repo.getWeekResults(lastWeek);
   if (lastWeekResult) return; // Already archived
   
-  const lastWeekNominations = db.getNominations(lastWeek);
+  const lastWeekNominations = repo.getNominations(lastWeek);
   if (lastWeekNominations.length === 0) return; // Nothing to archive
   
   // Sort by vote count and archive
@@ -131,7 +132,7 @@ const checkWeekTransition = () => {
   const second = sorted[1];
   
   // Save results
-  db.saveWeekResults(
+  repo.saveWeekResults(
     lastWeek,
     first?.tmdb_id, first?.title,
     second?.tmdb_id, second?.title
@@ -166,7 +167,7 @@ app.get('/api/state', (req, res) => {
   checkWeekTransition();
   
   const week = getWeekNumber();
-  const nominations = db.getNominations(week);
+  const nominations = repo.getNominations(week);
   let phase = getCurrentPhase();
   
   // Auto-advance to voting if all 4 nominated
@@ -179,14 +180,14 @@ app.get('/api/state', (req, res) => {
     phase,
     votingDeadline: getVotingDeadline(),
     nominations: nominations.map(formatNomination),
-    votes: db.getVotesAsObject(week),
-    users: db.getUsersAsObject()
+    votes: repo.getVotesAsObject(week),
+    users: repo.getUsersAsObject()
   });
 });
 
 // Get history
 app.get('/api/history', (req, res) => {
-  const results = db.getAllWeekResults();
+  const results = repo.getAllWeekResults();
   
   // Convert to legacy format for compatibility
   const history = results.map(r => ({
@@ -299,10 +300,10 @@ app.post('/api/nominate', async (req, res) => {
   }
   
   const week = getWeekNumber();
-  const nominations = db.getNominations(week);
+  const nominations = repo.getNominations(week);
   
   // Check if already nominated
-  const existing = db.getNominationByUser(week, user);
+  const existing = repo.getNominationByUser(week, user);
   if (existing) {
     return res.status(400).json({ error: 'You already nominated a movie this week' });
   }
@@ -324,7 +325,7 @@ app.post('/api/nominate', async (req, res) => {
     );
     const movie = await response.json();
     
-    db.addNomination(
+    repo.addNomination(
       week,
       tmdbId,
       movie.title,
@@ -355,7 +356,7 @@ app.post('/api/withdraw-nomination', (req, res) => {
   const week = getWeekNumber();
   
   try {
-    db.removeNomination(week, user);
+    repo.removeNomination(week, user);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -373,7 +374,7 @@ app.post('/api/vote', (req, res) => {
   const week = getWeekNumber();
   
   // Check nomination exists
-  const nomination = db.getNominationById(nominationId);
+  const nomination = repo.getNominationById(nominationId);
   if (!nomination) {
     return res.status(400).json({ error: 'Nomination not found' });
   }
@@ -385,9 +386,9 @@ app.post('/api/vote', (req, res) => {
   
   try {
     if (vote) {
-      db.addVote(week, nominationId, user);
+      repo.addVote(week, nominationId, user);
     } else {
-      db.removeVote(week, nominationId, user);
+      repo.removeVote(week, nominationId, user);
     }
     res.json({ success: true });
   } catch (error) {
@@ -400,7 +401,7 @@ app.get('/api/votes/:user', (req, res) => {
   const { user } = req.params;
   const week = getWeekNumber();
   
-  const votes = db.getUserVotes(week, user);
+  const votes = repo.getUserVotes(week, user);
   const votedIds = votes.map(v => v.nomination_id);
   
   res.json(votedIds);
@@ -415,7 +416,7 @@ app.post('/api/rate', (req, res) => {
   }
   
   try {
-    db.updateWatchRating(user, tmdbId, rating);
+    repo.updateWatchRating(user, tmdbId, rating);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -426,7 +427,7 @@ app.post('/api/rate', (req, res) => {
 app.get('/api/user/:user/ratings', (req, res) => {
   const { user } = req.params;
   
-  const history = db.getWatchHistory(user);
+  const history = repo.getWatchHistory(user);
   const ratings = {};
   
   history.forEach(h => {
@@ -447,7 +448,7 @@ app.post('/api/user/icon', (req, res) => {
   }
   
   try {
-    db.updateUserIcon(user, icon);
+    repo.updateUserIcon(user, icon);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: 'User not found' });
@@ -463,7 +464,7 @@ app.post('/api/user/pin', (req, res) => {
   }
   
   try {
-    db.updateUserPin(user, pin || null);
+    repo.updateUserPin(user, pin || null);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: 'User not found' });
@@ -478,7 +479,7 @@ app.post('/api/login', (req, res) => {
     return res.status(400).json({ error: 'Missing user' });
   }
   
-  const dbUser = db.getUserByName(user);
+  const dbUser = repo.getUserByName(user);
   if (!dbUser) {
     return res.status(400).json({ error: 'User not found' });
   }
@@ -557,14 +558,14 @@ app.get('/catalog/:type/:id.json', (req, res) => {
   
   try {
     if (id === 'nominations') {
-      const nominations = db.getNominations(week);
+      const nominations = repo.getNominations(week);
       nominations.forEach(n => {
         metas.push(formatMetaPreview(n, {
           description: `${n.overview}\n\nNominated by: ${n.proposed_by_name}`
         }));
       });
     } else if (id === 'winners') {
-      const results = db.getAllWeekResults();
+      const results = repo.getAllWeekResults();
       results.forEach(r => {
         if (r.first_place_tmdb) {
           metas.push({
@@ -585,11 +586,11 @@ app.get('/catalog/:type/:id.json', (req, res) => {
       });
     } else if (id === 'watched') {
       // Get all users' watch history
-      const users = db.getUsers();
+      const users = repo.getUsers();
       const watchedMap = {};
       
       users.forEach(u => {
-        const history = db.getWatchHistory(u.name);
+        const history = repo.getWatchHistory(u.name);
         history.forEach(h => {
           if (!watchedMap[h.tmdb_id]) {
             watchedMap[h.tmdb_id] = { ...h, watchers: [] };
@@ -644,7 +645,7 @@ app.get('/meta/:type/:id.json', async (req, res) => {
     const week = getWeekNumber();
     
     // Get custom metadata
-    const nominations = db.getNominations(week);
+    const nominations = repo.getNominations(week);
     const nomination = nominations.find(n => n.tmdb_id.toString() === tmdbId);
     
     let customDescription = movie.overview;
@@ -685,7 +686,7 @@ app.post('/api/watched', async (req, res) => {
   const week = getWeekNumber();
   
   try {
-    db.markWatched(user, tmdbId, title, week);
+    repo.markWatched(user, tmdbId, title, week);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -694,13 +695,13 @@ app.post('/api/watched', async (req, res) => {
 
 app.get('/api/watched/:user/:tmdbId', (req, res) => {
   const { user, tmdbId } = req.params;
-  const watched = db.hasWatched(user, parseInt(tmdbId));
+  const watched = repo.hasWatched(user, parseInt(tmdbId));
   res.json({ watched });
 });
 
 app.get('/api/watched/:user', (req, res) => {
   const { user } = req.params;
-  const history = db.getWatchHistory(user);
+  const history = repo.getWatchHistory(user);
   res.json(history.map(h => h.tmdb_id));
 });
 
