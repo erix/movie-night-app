@@ -892,6 +892,27 @@
       min-height: 20px;
     }
 
+    .ratings-row.detail-ratings {
+      margin-top: 8px;
+      margin-bottom: 4px;
+      gap: 10px;
+    }
+
+    .detail-ratings .rating-badge {
+      font-size: 12px;
+      padding: 3px 8px;
+    }
+
+    .detail-ratings .rating-badge svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .detail-ratings .rating-badge img {
+      width: 18px !important;
+      height: 18px !important;
+    }
+
     .rating-badge {
       display: inline-flex;
       align-items: center;
@@ -910,10 +931,10 @@
     }
 
     .imdb-badge { background: #F5C518; color: #000; }
-    .rt-badge { background: rgba(255,255,255,0.1); color: #fff; }
+    .rt-badge { background: rgba(255,255,255,0.9); color: #111; }
     .rt-badge.rt-fresh svg { fill: #FA320A; }
     .rt-badge.rt-rotten svg { fill: #66CC00; }
-    .rt-audience { background: rgba(255,255,255,0.08); color: #fff; }
+    .rt-audience { background: rgba(255,255,255,0.9); color: #111; }
     .rt-audience.rt-stale { opacity: 0.6; }
     .mc-badge { color: #fff; }
     .mc-badge.mc-green { background: #54A72B; }
@@ -1856,12 +1877,14 @@
             <span>${movie.runtime ? movie.runtime + ' min' : ''}</span>
             ${trailerHtml}
           </div>
+          <div class="ratings-row detail-ratings" data-ratings-tmdb="${movie.id}"></div>
           <div class="detail-overview">${movie.overview || 'No overview available.'}</div>
           ${actionHtml}
         </div>
       `;
       
       document.getElementById('modal').classList.add('active');
+      loadRatingsBadges(document.getElementById('modalBody'));
     }
 
     // Nominate movie
