@@ -15,7 +15,7 @@ spec:
       labels:
         app: movie-night
       annotations:
-        version: "5d519b6-1771487623"
+        version: "2983067-1772349743"
     spec:
       initContainers:
       - name: cleanup-data
