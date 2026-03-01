@@ -2292,14 +2292,23 @@
         html += `<span class="rating-badge imdb-badge visible">${imdbSvg} ${data.imdb}</span>`;
       }
       if (data.rt != null) {
-        const freshness = data.rt >= 60 ? 'rt-fresh' : 'rt-rotten';
-        const criticsIcon = data.rt >= 60 ? '🍅' : '🤢';
-        html += `<span class="rating-badge rt-badge ${freshness} visible">${criticsIcon} ${data.rt}%</span>`;
+        const freshness = data.rt >= 75 ? 'rt-fresh' : (data.rt >= 60 ? 'rt-fresh' : 'rt-rotten');
+        let criticsIconUrl;
+        if (data.rt >= 75) {
+          criticsIconUrl = 'https://www.clipartmax.com/png/small/146-1460784_certified-fresh-rotten-tomatoes-fresh-logo.png';
+        } else if (data.rt >= 60) {
+          criticsIconUrl = 'https://www.clipartmax.com/png/small/252-2523126_rotten-tomatoes-icon-rotten-tomatoes-icon-png.png';
+        } else {
+          criticsIconUrl = 'https://www.clipartmax.com/png/small/50-503753_rotten-tomatoes-logo-png.png';
+        }
+        html += `<span class="rating-badge rt-badge ${freshness} visible" title="Critics"><img src="${criticsIconUrl}" width="16" height="16" alt="RT Critics" style="vertical-align:middle"> ${data.rt}%</span>`;
       }
       if (data.rtAudience != null) {
         const hotness = data.rtAudience >= 60 ? 'rt-hot' : 'rt-stale';
-        const audienceIcon = data.rtAudience >= 60 ? '🍿' : '🪣';
-        html += `<span class="rating-badge rt-audience ${hotness} visible" title="Audience">${audienceIcon} ${data.rtAudience}%</span>`;
+        const audienceIconUrl = data.rtAudience >= 60
+          ? 'https://www.clipartmax.com/png/small/158-1588548_open-popcorn-icon-rotten-tomatoes.png'
+          : 'https://www.clipartmax.com/png/small/158-1588925_rotten-tomatoes-negative-audience-rotten-tomatoes-green-splat.png';
+        html += `<span class="rating-badge rt-audience ${hotness} visible" title="Audience"><img src="${audienceIconUrl}" width="16" height="16" alt="RT Audience" style="vertical-align:middle"> ${data.rtAudience}%</span>`;
       }
       if (data.mc != null) {
         const mcClass = data.mc >= 61 ? 'mc-green' : (data.mc >= 40 ? 'mc-yellow' : 'mc-red');
