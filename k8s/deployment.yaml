@@ -69,12 +69,6 @@ spec:
               name: movie-night-telegram
               key: trakt-encryption-key
               optional: true
-        - name: PUBLICMETADB_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: movie-night-secrets
-              key: publicmetadb-api-key
-              optional: true
         - name: DATA_DIR
           value: "/data"
         volumeMounts:
