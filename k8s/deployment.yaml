@@ -14,43 +14,10 @@ spec:
     metadata:
       labels:
         app: movie-night
-      annotations:
-        version: "0601076-1772353527"
     spec:
-      initContainers:
-      - name: cleanup-data
-        image: busybox
-        command:
-        - sh
-        - -c
-        - |
-          # Remove data.json if it's a directory (from previous mounts)
-          if [ -d /data/data.json ]; then
-            echo "Removing directory /data/data.json"
-            rm -rf /data/data.json
-          fi
-        volumeMounts:
-        - name: data
-          mountPath: /data
-      - name: git-clone
-        image: node:20-alpine
-        command:
-        - sh
-        - -c
-        - |
-          apk add --no-cache git
-          rm -rf /app/*
-          git clone https://github.com/erix/movie-night-app.git /tmp/repo
-          mv /tmp/repo/* /app/
-          cd /app && npm install --production
-        volumeMounts:
-        - name: app-code
-          mountPath: /app
       containers:
       - name: movie-night
-        image: node:20-alpine
-        workingDir: /app
-        command: ["node", "server.js"]
+        image: ghcr.io/erix/movie-night:latest # {"$imagepolicy": "flux-system:movie-night"}
         ports:
         - containerPort: 3000
           name: http
@@ -111,8 +78,6 @@ spec:
         - name: DATA_DIR
           value: "/data"
         volumeMounts:
-        - name: app-code
-          mountPath: /app
         - name: data
           mountPath: /data
         resources:
@@ -135,8 +100,6 @@ spec:
           initialDelaySeconds: 20
           periodSeconds: 10
       volumes:
-      - name: app-code
-        emptyDir: {}
       - name: data
         persistentVolumeClaim:
           claimName: movie-night-pvc
