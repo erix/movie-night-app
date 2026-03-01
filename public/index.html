@@ -2320,9 +2320,9 @@
         if (data.rt >= 75) {
           criticsIconUrl = 'https://www.clipartmax.com/png/small/146-1460784_certified-fresh-rotten-tomatoes-fresh-logo.png';
         } else if (data.rt >= 60) {
-          criticsIconUrl = 'https://www.clipartmax.com/png/small/252-2523126_rotten-tomatoes-icon-rotten-tomatoes-icon-png.png';
-        } else {
           criticsIconUrl = 'https://www.clipartmax.com/png/small/50-503753_rotten-tomatoes-logo-png.png';
+        } else {
+          criticsIconUrl = 'https://www.clipartmax.com/png/small/252-2523126_rotten-tomatoes-icon-rotten-tomatoes-icon-png.png';
         }
         html += `<span class="rating-badge rt-badge ${freshness} visible" title="Critics"><img src="${criticsIconUrl}" width="16" height="16" alt="RT Critics" style="vertical-align:middle"> ${data.rt}%</span>`;
       }
