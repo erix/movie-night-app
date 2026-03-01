@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "node -r dotenv/config server.js",
+    "docker:build": "docker build -t movie-night:test .",
+    "docker:run": "docker run --rm --env-file .env -p 3003:3000 movie-night:test",
+    "docker:test": "npm run docker:build && npm run docker:run"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
