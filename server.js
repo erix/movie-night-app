@@ -82,7 +82,7 @@ app.get('/api/ratings/:tmdbId', async (req, res) => {
   const { tmdbId } = req.params;
 
   if (!process.env.MDBLIST_API_KEY) {
-    return res.json({ imdb: null, rt: null, mc: null });
+    return res.json({ imdb: null, rt: null, rtAudience: null, mc: null });
   }
 
   // Check cache
@@ -97,7 +97,7 @@ app.get('/api/ratings/:tmdbId', async (req, res) => {
     );
 
     if (!response.ok) {
-      const result = { imdb: null, rt: null, mc: null };
+      const result = { imdb: null, rt: null, rtAudience: null, mc: null };
       ratingsCache.set(tmdbId, { data: result, timestamp: Date.now() });
       return res.json(result);
     }
@@ -107,11 +107,13 @@ app.get('/api/ratings/:tmdbId', async (req, res) => {
 
     const imdbRating = ratings.find(r => r.source === 'imdb');
     const rtRating = ratings.find(r => r.source === 'tomatoes');
+    const rtAudienceRating = ratings.find(r => r.source === 'tomatoesaudience');
     const mcRating = ratings.find(r => r.source === 'metacritic');
 
     const result = {
       imdb: imdbRating?.value ?? null,
       rt: rtRating?.value ?? null,
+      rtAudience: rtAudienceRating?.value ?? null,
       mc: mcRating?.value ?? null
     };
 
@@ -119,7 +121,7 @@ app.get('/api/ratings/:tmdbId', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('MDBList ratings error:', error.message);
-    res.json({ imdb: null, rt: null, mc: null });
+    res.json({ imdb: null, rt: null, rtAudience: null, mc: null });
   }
 });
 

@@ -913,6 +913,8 @@
     .rt-badge { background: rgba(255,255,255,0.1); color: #fff; }
     .rt-badge.rt-fresh svg { fill: #FA320A; }
     .rt-badge.rt-rotten svg { fill: #66CC00; }
+    .rt-audience { background: rgba(255,255,255,0.08); color: #fff; }
+    .rt-audience.rt-stale { opacity: 0.6; }
     .mc-badge { color: #fff; }
     .mc-badge.mc-green { background: #54A72B; }
     .mc-badge.mc-yellow { background: #FFBD3F; color: #000; }
@@ -2291,7 +2293,13 @@
       }
       if (data.rt != null) {
         const freshness = data.rt >= 60 ? 'rt-fresh' : 'rt-rotten';
-        html += `<span class="rating-badge rt-badge ${freshness} visible">${rtSvg} ${data.rt}%</span>`;
+        const criticsIcon = data.rt >= 60 ? '🍅' : '🤢';
+        html += `<span class="rating-badge rt-badge ${freshness} visible">${criticsIcon} ${data.rt}%</span>`;
+      }
+      if (data.rtAudience != null) {
+        const hotness = data.rtAudience >= 60 ? 'rt-hot' : 'rt-stale';
+        const audienceIcon = data.rtAudience >= 60 ? '🍿' : '🪣';
+        html += `<span class="rating-badge rt-audience ${hotness} visible" title="Audience">${audienceIcon} ${data.rtAudience}%</span>`;
       }
       if (data.mc != null) {
         const mcClass = data.mc >= 61 ? 'mc-green' : (data.mc >= 40 ? 'mc-yellow' : 'mc-red');
