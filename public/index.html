@@ -1696,7 +1696,7 @@
       console.log('Fetching search results for:', query);
 
       try {
-        const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
         const movies = await response.json();
         console.log('Got', movies.length, 'results');
 
