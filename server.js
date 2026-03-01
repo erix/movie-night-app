@@ -73,6 +73,48 @@ const getVotingDeadline = () => {
   return friday.toISOString();
 };
 
+// ─── PublicMetaDB Ratings (PUBLICMETADB_API_KEY must be added to k8s secret movie-night-secrets) ──
+
+const pmdbCache = new Map(); // key: tmdbId, value: { data, timestamp }
+const PMDB_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+app.get('/api/ratings/:tmdbId', async (req, res) => {
+  const { tmdbId } = req.params;
+
+  if (!process.env.PUBLICMETADB_API_KEY) {
+    return res.json(null);
+  }
+
+  // Check cache
+  const cached = pmdbCache.get(tmdbId);
+  if (cached && Date.now() - cached.timestamp < PMDB_CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
+  try {
+    const response = await fetch(
+      `https://publicmetadb.com/api/external/ratings?tmdb_id=${tmdbId}&media_type=movie`,
+      { headers: { 'Authorization': `Bearer ${process.env.PUBLICMETADB_API_KEY}` } }
+    );
+
+    if (!response.ok) {
+      pmdbCache.set(tmdbId, { data: null, timestamp: Date.now() });
+      return res.json(null);
+    }
+
+    const data = await response.json();
+    const result = (data.average != null)
+      ? { average: data.average, count: data.total || 0 }
+      : null;
+
+    pmdbCache.set(tmdbId, { data: result, timestamp: Date.now() });
+    res.json(result);
+  } catch (error) {
+    console.error('PublicMetaDB error:', error.message);
+    res.json(null);
+  }
+});
+
 // ─── MDBList Integration ─────────────────────────────────────────────────────
 
 const addToMDBList = async (tmdbId, imdbId, title) => {

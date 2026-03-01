@@ -883,6 +883,26 @@
       vertical-align: middle;
     }
 
+    .pmdb-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(106, 27, 154, 0.9);
+      color: #fff;
+      font-size: 0.75em;
+      font-weight: 700;
+      padding: 3px 7px;
+      border-radius: 4px;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .pmdb-badge.visible {
+      opacity: 1;
+    }
+
     .change-nomination-btn {
       display: block;
       margin: 15px auto 0;
@@ -1370,6 +1390,7 @@
       updateUserInfo();
       renderPhase();
       renderNominations();
+      loadPmdbBadges();
       if (currentUser && !skipBrowse) {
         await loadBrowse();
       }
@@ -1536,8 +1557,9 @@
             }
             
             return `
-              <div class="${cardClass}">
+              <div class="${cardClass}" data-tmdb-id="${nom.tmdbId}">
                 ${badge}
+                <span class="pmdb-badge" data-pmdb="${nom.tmdbId}"></span>
                 <img class="nomination-backdrop" src="${backdropUrl}" alt="${nom.title}" onclick="showMovieDetail(${nom.tmdbId})" style="cursor: pointer;" onerror="this.src='https://via.placeholder.com/300x200?text=${encodeURIComponent(nom.title)}'">
                 <div class="nomination-info" onclick="showMovieDetail(${nom.tmdbId})" style="cursor: pointer;">
                   <div class="nomination-title">${nom.title}</div>
@@ -1646,13 +1668,15 @@
             </div>
           </div>
         `;
+        loadPmdbBadges(section);
       }
     }
     
     // Render movie card (reusable)
     function renderMovieCard(movie) {
       return `
-        <div class="movie-card" onclick="showMovieDetail(${movie.id})">
+        <div class="movie-card" data-tmdb-id="${movie.id}" onclick="showMovieDetail(${movie.id})" style="position:relative">
+          <span class="pmdb-badge" data-pmdb="${movie.id}"></span>
           <img class="movie-backdrop" src="https://image.tmdb.org/t/p/w500${movie.backdrop_path || movie.poster_path || ''}" alt="${movie.title}" onerror="this.src='https://via.placeholder.com/300x170?text=${encodeURIComponent(movie.title)}'">
           <div class="movie-info">
             <div class="movie-title">${movie.title}</div>
@@ -1715,7 +1739,8 @@
           const titleSafe = (movie.title || 'Unknown').replace(/'/g, '&apos;').replace(/"/g, '&quot;');
 
           return `
-            <div class="suggestion-item" onclick="selectSuggestion(${movie.id})">
+            <div class="suggestion-item" data-tmdb-id="${movie.id}" onclick="selectSuggestion(${movie.id})" style="position:relative">
+              <span class="pmdb-badge" data-pmdb="${movie.id}" style="position:static;display:inline-block;margin-right:8px;flex-shrink:0;align-self:center"></span>
               <img class="suggestion-backdrop" src="${backdropUrl}" alt="${titleSafe}" onerror="this.src='https://via.placeholder.com/120x70?text=No+Image'">
               <div class="suggestion-info">
                 <div class="suggestion-title">${titleSafe}</div>
@@ -1727,6 +1752,7 @@
             </div>
           `;
         }).join('');
+        loadPmdbBadges(suggestionsDiv);
         console.log('Search suggestions rendered');
       } catch (error) {
         console.error('Search error:', error);
@@ -2211,6 +2237,38 @@
           }).join('')}
         </div>
       `;
+    }
+
+    // ── PMDB lazy badge loader ──────────────────────────────────────────────
+    const pmdbClientCache = {};
+
+    function loadPmdbBadges(root) {
+      const badges = (root || document).querySelectorAll('.pmdb-badge:not(.loaded)');
+      badges.forEach(badge => {
+        const tmdbId = badge.dataset.pmdb;
+        if (!tmdbId) return;
+        badge.classList.add('loaded');
+
+        if (pmdbClientCache[tmdbId] !== undefined) {
+          applyPmdbBadge(badge, pmdbClientCache[tmdbId]);
+          return;
+        }
+
+        fetch(`/api/ratings/${tmdbId}`)
+          .then(r => r.json())
+          .then(data => {
+            pmdbClientCache[tmdbId] = data;
+            // Apply to ALL badges for this tmdbId (card may appear in multiple places)
+            document.querySelectorAll(`.pmdb-badge[data-pmdb="${tmdbId}"]`).forEach(b => applyPmdbBadge(b, data));
+          })
+          .catch(() => { /* hide gracefully */ });
+      });
+    }
+
+    function applyPmdbBadge(badge, data) {
+      if (!data || data.average == null) return;
+      badge.textContent = `PMDB ${Math.round(data.average)}%`;
+      badge.classList.add('visible');
     }
 
     // Set up search event delegation (runs once, survives DOM changes)
