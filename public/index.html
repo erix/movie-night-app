@@ -883,25 +883,60 @@
       vertical-align: middle;
     }
 
-    .pmdb-badge {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(106, 27, 154, 0.9);
-      color: #fff;
-      font-size: 0.75em;
-      font-weight: 700;
-      padding: 3px 7px;
-      border-radius: 4px;
-      z-index: 2;
-      pointer-events: none;
+    .ratings-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 4px;
+      flex-wrap: wrap;
+      min-height: 20px;
+    }
+
+    .rating-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 0.78em;
+      font-weight: 600;
       opacity: 0;
       transition: opacity 0.3s;
     }
 
-    .pmdb-badge.visible {
+    .rating-badge.visible {
       opacity: 1;
     }
+
+    .imdb-logo {
+      background: #f5c518;
+      color: #000;
+      font-size: 0.75em;
+      font-weight: 800;
+      padding: 1px 4px;
+      border-radius: 2px;
+      letter-spacing: 0.5px;
+    }
+
+    .rating-badge.imdb {
+      color: #fff;
+    }
+
+    .rating-badge.rt {
+      color: #fff;
+    }
+
+    .mc-score {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.9em;
+      line-height: 1.3;
+    }
+
+    .mc-score.mc-green { background: #6c3; }
+    .mc-score.mc-yellow { background: #fc3; color: #000; }
+    .mc-score.mc-red { background: #f00; }
 
     .change-nomination-btn {
       display: block;
@@ -1390,7 +1425,7 @@
       updateUserInfo();
       renderPhase();
       renderNominations();
-      loadPmdbBadges();
+      loadRatingsBadges();
       if (currentUser && !skipBrowse) {
         await loadBrowse();
       }
@@ -1559,7 +1594,6 @@
             return `
               <div class="${cardClass}" data-tmdb-id="${nom.tmdbId}">
                 ${badge}
-                <span class="pmdb-badge" data-pmdb="${nom.tmdbId}"></span>
                 <img class="nomination-backdrop" src="${backdropUrl}" alt="${nom.title}" onclick="showMovieDetail(${nom.tmdbId})" style="cursor: pointer;" onerror="this.src='https://via.placeholder.com/300x200?text=${encodeURIComponent(nom.title)}'">
                 <div class="nomination-info" onclick="showMovieDetail(${nom.tmdbId})" style="cursor: pointer;">
                   <div class="nomination-title">${nom.title}</div>
@@ -1570,6 +1604,7 @@
                       <span class="proposer-icon">${userIcons[nom.proposedBy]?.icon || ''}</span>${nom.proposedBy}
                     </span>
                   </div>
+                  <div class="ratings-row" data-ratings-tmdb="${nom.tmdbId}"></div>
                   ${state.phase === 'voting' && currentUser ? `
                     <div class="vote-section" onclick="event.stopPropagation()">
                       <button 
@@ -1668,15 +1703,14 @@
             </div>
           </div>
         `;
-        loadPmdbBadges(section);
+        loadRatingsBadges(section);
       }
     }
     
     // Render movie card (reusable)
     function renderMovieCard(movie) {
       return `
-        <div class="movie-card" data-tmdb-id="${movie.id}" onclick="showMovieDetail(${movie.id})" style="position:relative">
-          <span class="pmdb-badge" data-pmdb="${movie.id}"></span>
+        <div class="movie-card" data-tmdb-id="${movie.id}" onclick="showMovieDetail(${movie.id})">
           <img class="movie-backdrop" src="https://image.tmdb.org/t/p/w500${movie.backdrop_path || movie.poster_path || ''}" alt="${movie.title}" onerror="this.src='https://via.placeholder.com/300x170?text=${encodeURIComponent(movie.title)}'">
           <div class="movie-info">
             <div class="movie-title">${movie.title}</div>
@@ -1684,6 +1718,7 @@
               <span class="rating">⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}</span>
               <span>${movie.release_date ? movie.release_date.split('-')[0] : ''}</span>
             </div>
+            <div class="ratings-row" data-ratings-tmdb="${movie.id}"></div>
           </div>
         </div>
       `;
@@ -1739,8 +1774,7 @@
           const titleSafe = (movie.title || 'Unknown').replace(/'/g, '&apos;').replace(/"/g, '&quot;');
 
           return `
-            <div class="suggestion-item" data-tmdb-id="${movie.id}" onclick="selectSuggestion(${movie.id})" style="position:relative">
-              <span class="pmdb-badge" data-pmdb="${movie.id}" style="position:static;display:inline-block;margin-right:8px;flex-shrink:0;align-self:center"></span>
+            <div class="suggestion-item" data-tmdb-id="${movie.id}" onclick="selectSuggestion(${movie.id})">
               <img class="suggestion-backdrop" src="${backdropUrl}" alt="${titleSafe}" onerror="this.src='https://via.placeholder.com/120x70?text=No+Image'">
               <div class="suggestion-info">
                 <div class="suggestion-title">${titleSafe}</div>
@@ -1748,11 +1782,12 @@
                   <span class="rating">⭐ ${movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}</span>
                   <span>${movie.release_date ? movie.release_date.split('-')[0] : 'N/A'}</span>
                 </div>
+                <div class="ratings-row" data-ratings-tmdb="${movie.id}"></div>
               </div>
             </div>
           `;
         }).join('');
-        loadPmdbBadges(suggestionsDiv);
+        loadRatingsBadges(suggestionsDiv);
         console.log('Search suggestions rendered');
       } catch (error) {
         console.error('Search error:', error);
@@ -2239,36 +2274,50 @@
       `;
     }
 
-    // ── PMDB lazy badge loader ──────────────────────────────────────────────
-    const pmdbClientCache = {};
+    // ── Ratings lazy loader (IMDb / RT / Metacritic via MDBList) ───────────
+    const ratingsClientCache = {};
 
-    function loadPmdbBadges(root) {
-      const badges = (root || document).querySelectorAll('.pmdb-badge:not(.loaded)');
-      badges.forEach(badge => {
-        const tmdbId = badge.dataset.pmdb;
+    function loadRatingsBadges(root) {
+      const rows = (root || document).querySelectorAll('.ratings-row:not(.loaded)');
+      rows.forEach(row => {
+        const tmdbId = row.dataset.ratingsTmdb;
         if (!tmdbId) return;
-        badge.classList.add('loaded');
+        row.classList.add('loaded');
 
-        if (pmdbClientCache[tmdbId] !== undefined) {
-          applyPmdbBadge(badge, pmdbClientCache[tmdbId]);
+        if (ratingsClientCache[tmdbId] !== undefined) {
+          applyRatingsRow(row, ratingsClientCache[tmdbId]);
           return;
         }
 
         fetch(`/api/ratings/${tmdbId}`)
           .then(r => r.json())
           .then(data => {
-            pmdbClientCache[tmdbId] = data;
-            // Apply to ALL badges for this tmdbId (card may appear in multiple places)
-            document.querySelectorAll(`.pmdb-badge[data-pmdb="${tmdbId}"]`).forEach(b => applyPmdbBadge(b, data));
+            ratingsClientCache[tmdbId] = data;
+            document.querySelectorAll(`.ratings-row[data-ratings-tmdb="${tmdbId}"]`).forEach(r => applyRatingsRow(r, data));
           })
           .catch(() => { /* hide gracefully */ });
       });
     }
 
-    function applyPmdbBadge(badge, data) {
-      if (!data || data.average == null) return;
-      badge.textContent = `PMDB ${Math.round(data.average)}%`;
-      badge.classList.add('visible');
+    function applyRatingsRow(row, data) {
+      if (!data) return;
+      let html = '';
+
+      if (data.imdb != null) {
+        html += `<span class="rating-badge imdb visible"><span class="imdb-logo">IMDb</span> ${data.imdb}</span>`;
+      }
+      if (data.rt != null) {
+        const icon = data.rt >= 60 ? '🍅' : '🤢';
+        html += `<span class="rating-badge rt visible">${icon} ${data.rt}%</span>`;
+      }
+      if (data.mc != null) {
+        const mcClass = data.mc >= 61 ? 'mc-green' : (data.mc >= 40 ? 'mc-yellow' : 'mc-red');
+        html += `<span class="rating-badge visible"><span class="mc-score ${mcClass}">${data.mc}</span></span>`;
+      }
+
+      if (html) {
+        row.innerHTML = html;
+      }
     }
 
     // Set up search event delegation (runs once, survives DOM changes)
