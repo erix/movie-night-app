@@ -11,6 +11,11 @@ RUN npm ci --only=production
 # Copy application files
 COPY server.js ./
 COPY public ./public
+COPY repository ./repository
+COPY db ./db
+COPY telegram ./telegram
+COPY trakt ./trakt
+COPY utils ./utils
 
 # Create data directory
 RUN mkdir -p /data
@@ -24,4 +29,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
 
 # Start the application
 CMD ["node", "server.js"]
-
