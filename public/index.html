@@ -1948,25 +1948,32 @@
     }
 
     // Toggle vote
-    async function toggleVote(movieId) {
-      // Get current vote status
+    async function toggleVote(nominationId) {
+      nominationId = parseInt(nominationId, 10);
+      // Get current vote status — API returns array of voted nomination IDs
       const response = await fetch(`/api/votes/${currentUser}`);
-      const voteStatus = await response.json();
+      const votedIds = (await response.json()).map(Number);
       
-      const currentlyVoted = voteStatus.votes[movieId];
+      const currentlyVoted = votedIds.includes(nominationId);
       const newValue = !currentlyVoted;
       
       // Check if trying to add 3rd vote
-      if (newValue && voteStatus.count >= 2) {
+      if (newValue && votedIds.length >= 2) {
         alert('You can only vote for 2 movies!');
         return;
       }
       
-      await fetch('/api/vote', {
+      const result = await fetch('/api/vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ movieId, user: currentUser, value: newValue })
+        body: JSON.stringify({ nominationId, user: currentUser, vote: newValue })
       });
+      
+      if (!result.ok) {
+        const err = await result.json();
+        alert(err.error || 'Vote failed');
+        return;
+      }
       
       loadState();
     }
