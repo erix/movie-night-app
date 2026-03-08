@@ -284,3 +284,4 @@ Built with ❤️ for family movie time 🍿🎬
 ---
 
 **Version 2.0** - Netflix UI + Weekly Phases + PIN Auth + Ratings
+# rebuild
