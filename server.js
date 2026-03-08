@@ -630,7 +630,7 @@ Movies watched:
 ${moviesList}
 
 Based on this watch history, recommend movies the user would enjoy but has NOT already watched.
-Return exactly 8 categories, each with up to 15 movies.
+Return exactly 12 categories, each with exactly 15 movies. Do not return fewer than 15 movies per category.
 
 Return ONLY valid JSON in this exact format:
 {
@@ -651,7 +651,7 @@ Return ONLY valid JSON in this exact format:
   ]
 }
 
-The 8 categories must be exactly:
+The 12 categories must be exactly:
 1. id: "picked_for_you", name: "Picked For You", emoji: "🎯" — personalized core recommendations based on their taste
 2. id: "comfort_zone", name: "Your Comfort Zone", emoji: "🛋️" — safe bets very similar to films they already love
 3. id: "expand_horizons", name: "Expand Your Horizons", emoji: "🌍" — films outside their usual genres they might enjoy
@@ -659,7 +659,11 @@ The 8 categories must be exactly:
 5. id: "critically_acclaimed", name: "Critically Acclaimed", emoji: "🏆" — highly rated, award-nominated films they have not seen
 6. id: "guilty_pleasures", name: "Guilty Pleasures", emoji: "🍿" — fun, popcorn, crowd-pleasing films
 7. id: "modern_classics", name: "Modern Classics", emoji: "🎬" — must-see films from the last 10-15 years they missed
-8. id: "world_cinema", name: "World Cinema", emoji: "🌏" — international/foreign language films matching their taste`;
+8. id: "world_cinema", name: "World Cinema", emoji: "🌏" — international/foreign language films matching their taste
+9. id: "you_missed_these", name: "You Missed These", emoji: "⏰" — older films (pre-2010) that are considered essential viewing matching their taste
+10. id: "visually_stunning", name: "Visually Stunning", emoji: "🎨" — films known for exceptional cinematography, visuals, or art direction matching their taste
+11. id: "starring_your_favorites", name: "Starring Your Favorites", emoji: "🎭" — films starring actors who appear frequently in the user's watch history
+12. id: "documentaries", name: "Documentaries You'll Like", emoji: "📽️" — documentaries matching the user's interests based on their watch history`;
 
   try {
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -671,11 +675,11 @@ The 8 categories must be exactly:
         'X-Title': 'Movie Night AI Picks'
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-lite-001',
+        model: 'google/gemini-2.5-flash-preview',
         messages: [
           {
             role: 'system',
-            content: 'You are a movie recommendation engine. Based on the user\'s watch history, recommend movies they would enjoy but have NOT already watched, organized into 8 specific categories. Return ONLY valid JSON.'
+            content: 'You are a movie recommendation engine. Based on the user\'s watch history, recommend movies they would enjoy but have NOT already watched, organized into 12 specific categories. Return exactly 15 movies per category. Do not return fewer. Return ONLY valid JSON.'
           },
           { role: 'user', content: userPrompt }
         ],
