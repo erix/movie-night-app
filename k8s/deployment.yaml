@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: movie-night
-        image: ghcr.io/erix/movie-night:build-11-sha-c70b99c # {"$imagepolicy": "flux-system:movie-night"}
+        image: ghcr.io/erix/movie-night:build-12-sha-51cf3f0 # {"$imagepolicy": "flux-system:movie-night"}
         ports:
         - containerPort: 3000
           name: http
