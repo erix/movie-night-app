@@ -87,6 +87,12 @@ const initSchema = () => {
       second_place_title TEXT,
       finalized_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS ai_picks_cache (
+      user_id TEXT PRIMARY KEY,
+      data TEXT NOT NULL,
+      generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 };
 
@@ -311,6 +317,19 @@ const getVotesAsObject = (week) => {
   return votes;
 };
 
+// ─── AI Picks Cache ───────────────────────────────────────────────────────────
+
+const getAiPicksCache = (userName) => {
+  return getDb().prepare('SELECT data, generated_at FROM ai_picks_cache WHERE user_id = ?').get(userName);
+};
+
+const setAiPicksCache = (userName, data) => {
+  return getDb().prepare(`
+    INSERT INTO ai_picks_cache (user_id, data, generated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, generated_at = CURRENT_TIMESTAMP
+  `).run(userName, data);
+};
+
 const updateWatchRating = (userName, tmdbId, rating) => {
   const user = getUserByName(userName);
   if (!user) throw new Error(`User not found: ${userName}`);
@@ -340,4 +359,6 @@ module.exports = {
   getWeekResults, getAllWeekResults, saveWeekResults,
   // Trakt auth
   getTraktAuth, saveTraktAuth, removeTraktAuth,
+  // AI picks cache
+  getAiPicksCache, setAiPicksCache,
 };

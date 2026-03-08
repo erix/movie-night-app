@@ -571,27 +571,9 @@ app.get('/api/mdblist/status', (req, res) => {
 
 // ─── AI Picks ─────────────────────────────────────────────────────────────────
 
-const aiPicksCache = new Map(); // key: userName, value: { data, timestamp }
-const AI_PICKS_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
-app.get('/api/ai-picks/:user', async (req, res) => {
-  const { user } = req.params;
-
-  // Check cache (skip if ?refresh=1)
-  const forceRefresh = req.query.refresh === '1';
-  const cached = aiPicksCache.get(user);
-  if (!forceRefresh && cached && Date.now() - cached.timestamp < AI_PICKS_CACHE_TTL) {
-    return res.json(cached.data);
-  }
-
-  if (!process.env.OPENROUTER_API_KEY) {
-    return res.status(500).json({ error: 'OpenRouter API key not configured' });
-  }
-
-  if (!process.env.TMDB_API_KEY) {
-    return res.status(500).json({ error: 'TMDb API key not configured' });
-  }
-
+async function generateAiPicks(user) {
   const traktApi = require('./trakt/api');
   const db = require('./db/database');
 
@@ -619,7 +601,7 @@ app.get('/api/ai-picks/:user', async (req, res) => {
   }
 
   if (watchedMovies.length === 0) {
-    return res.json({ categories: [], message: 'No watch history found. Watch some movies first!' });
+    return { categories: [], message: 'No watch history found. Watch some movies first!' };
   }
 
   const moviesList = watchedMovies.slice(0, 100).map(m => `${m.title}${m.year ? ` (${m.year})` : ''}`).join('\n');
@@ -665,90 +647,124 @@ The 12 categories must be exactly:
 11. id: "starring_your_favorites", name: "Starring Your Favorites", emoji: "🎭" — films starring actors who appear frequently in the user's watch history
 12. id: "documentaries", name: "Documentaries You'll Like", emoji: "📽️" — documentaries matching the user's interests based on their watch history`;
 
+  const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'HTTP-Referer': 'https://movies.erix-homelab.site',
+      'X-Title': 'Movie Night AI Picks'
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a movie recommendation engine. Based on the user\'s watch history, recommend movies they would enjoy but have NOT already watched, organized into 12 specific categories. Return exactly 15 movies per category. Do not return fewer. Return ONLY valid JSON.'
+        },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_object' }
+    })
+  });
+
+  if (!aiResponse.ok) {
+    const errText = await aiResponse.text();
+    console.error('OpenRouter error:', errText);
+    throw new Error('AI service error');
+  }
+
+  const aiData = await aiResponse.json();
+  const content = aiData.choices?.[0]?.message?.content;
+  if (!content) throw new Error('No response from AI');
+
+  let parsed;
   try {
-    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'HTTP-Referer': 'https://movies.erix-homelab.site',
-        'X-Title': 'Movie Night AI Picks'
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-preview',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a movie recommendation engine. Based on the user\'s watch history, recommend movies they would enjoy but have NOT already watched, organized into 12 specific categories. Return exactly 15 movies per category. Do not return fewer. Return ONLY valid JSON.'
-          },
-          { role: 'user', content: userPrompt }
-        ],
-        response_format: { type: 'json_object' }
-      })
-    });
+    parsed = JSON.parse(content);
+  } catch (e) {
+    const match = content.match(/\{[\s\S]*\}/);
+    if (match) parsed = JSON.parse(match[0]);
+    else throw new Error('Failed to parse AI response');
+  }
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error('OpenRouter error:', errText);
-      return res.status(500).json({ error: 'AI service error' });
-    }
+  const categories = parsed.categories || [];
 
-    const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content;
-    if (!content) return res.status(500).json({ error: 'No response from AI' });
-
-    let parsed;
-    try {
-      parsed = JSON.parse(content);
-    } catch (e) {
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) parsed = JSON.parse(match[0]);
-      else return res.status(500).json({ error: 'Failed to parse AI response' });
-    }
-
-    const categories = parsed.categories || [];
-
-    // Enrich each movie in each category with TMDb data
-    const enrichedCategories = await Promise.all(categories.map(async (cat) => {
-      const movies = await Promise.all((cat.movies || []).map(async (rec) => {
-        try {
-          const query = rec.tmdb_query || rec.title;
-          const yearParam = rec.year ? `&year=${rec.year}` : '';
-          const tmdbRes = await fetch(
-            `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(query)}${yearParam}&include_adult=false`
-          );
-          const tmdbData = await tmdbRes.json();
-          const result = tmdbData.results?.[0];
-          if (!result) return null;
-          return {
-            ...rec,
-            tmdb: {
-              id: result.id,
-              title: result.title,
-              poster_path: result.poster_path,
-              overview: result.overview,
-              vote_average: result.vote_average,
-              release_date: result.release_date
-            }
-          };
-        } catch (e) {
-          return null;
-        }
-      }));
-      return {
-        id: cat.id,
-        name: cat.name,
-        emoji: cat.emoji,
-        movies: movies.filter(Boolean)
-      };
+  // Enrich each movie in each category with TMDb data
+  const enrichedCategories = await Promise.all(categories.map(async (cat) => {
+    const movies = await Promise.all((cat.movies || []).map(async (rec) => {
+      try {
+        const query = rec.tmdb_query || rec.title;
+        const yearParam = rec.year ? `&year=${rec.year}` : '';
+        const tmdbRes = await fetch(
+          `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(query)}${yearParam}&include_adult=false`
+        );
+        const tmdbData = await tmdbRes.json();
+        const result = tmdbData.results?.[0];
+        if (!result) return null;
+        return {
+          ...rec,
+          tmdb: {
+            id: result.id,
+            title: result.title,
+            poster_path: result.poster_path,
+            overview: result.overview,
+            vote_average: result.vote_average,
+            release_date: result.release_date
+          }
+        };
+      } catch (e) {
+        return null;
+      }
     }));
+    return {
+      id: cat.id,
+      name: cat.name,
+      emoji: cat.emoji,
+      movies: movies.filter(Boolean)
+    };
+  }));
 
-    const result = { categories: enrichedCategories };
-    aiPicksCache.set(user, { data: result, timestamp: Date.now() });
-    res.json(result);
+  return { categories: enrichedCategories };
+}
+
+app.get('/api/ai-picks/:user', async (req, res) => {
+  const { user } = req.params;
+  const forceRefresh = req.query.refresh === '1';
+
+  if (!process.env.OPENROUTER_API_KEY) {
+    return res.status(500).json({ error: 'OpenRouter API key not configured' });
+  }
+
+  if (!process.env.TMDB_API_KEY) {
+    return res.status(500).json({ error: 'TMDb API key not configured' });
+  }
+
+  const cached = repo.getAiPicksCache(user);
+  const cacheAge = cached ? Date.now() - new Date(cached.generated_at).getTime() : Infinity;
+  const cacheValid = cached && cacheAge < CACHE_TTL_MS;
+
+  if (!forceRefresh && cacheValid) {
+    // Fresh cache: return immediately
+    return res.json({ ...JSON.parse(cached.data), generatedAt: cached.generated_at });
+  }
+
+  if (!forceRefresh && cached && cacheAge >= CACHE_TTL_MS) {
+    // Stale cache: return old data immediately, regenerate in background
+    res.json({ ...JSON.parse(cached.data), generatedAt: cached.generated_at });
+    generateAiPicks(user).then(result => {
+      repo.setAiPicksCache(user, JSON.stringify(result));
+    }).catch(err => console.error('Background AI picks refresh failed:', err));
+    return;
+  }
+
+  // No cache at all (first time): generate and wait
+  try {
+    const result = await generateAiPicks(user);
+    repo.setAiPicksCache(user, JSON.stringify(result));
+    res.json({ ...result, generatedAt: new Date().toISOString() });
   } catch (error) {
     console.error('AI picks error:', error);
-    res.status(500).json({ error: 'Failed to get AI picks' });
+    res.status(500).json({ error: error.message || 'Failed to get AI picks' });
   }
 });
 
