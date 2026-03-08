@@ -67,6 +67,11 @@ const getWatchlist = async (userName) => {
   return traktRequest(userName, 'GET', '/sync/watchlist/movies');
 };
 
+// Get full watched show history from Trakt
+const getWatchedShows = async (userName) => {
+  return traktRequest(userName, 'GET', '/sync/watched/shows');
+};
+
 // Sync all watched movies from Trakt into local DB
 const syncWatchedFromTrakt = async (userName) => {
   const watched = await getWatchedMovies(userName);
@@ -113,6 +118,7 @@ const syncWatchedToTrakt = async (userName) => {
 module.exports = {
   getProfile,
   getWatchedMovies,
+  getWatchedShows,
   markWatched,
   syncRating,
   getWatchlist,

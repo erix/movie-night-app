@@ -569,6 +569,167 @@ app.get('/api/mdblist/status', (req, res) => {
   });
 });
 
+// ─── AI Picks ─────────────────────────────────────────────────────────────────
+
+const aiPicksCache = new Map(); // key: userName, value: { data, timestamp }
+const AI_PICKS_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+app.get('/api/ai-picks/:user', async (req, res) => {
+  const { user } = req.params;
+
+  // Check cache
+  const cached = aiPicksCache.get(user);
+  if (cached && Date.now() - cached.timestamp < AI_PICKS_CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
+  if (!process.env.OPENROUTER_API_KEY) {
+    return res.status(500).json({ error: 'OpenRouter API key not configured' });
+  }
+
+  if (!process.env.TMDB_API_KEY) {
+    return res.status(500).json({ error: 'TMDb API key not configured' });
+  }
+
+  const traktApi = require('./trakt/api');
+  const db = require('./db/database');
+
+  let watchedMovies = [];
+  let watchedShows = [];
+
+  // Try Trakt for richer history
+  const traktAuth = db.getTraktAuth(user);
+  if (traktAuth) {
+    try {
+      const traktMovies = await traktApi.getWatchedMovies(user);
+      watchedMovies = (traktMovies || []).map(e => ({ title: e.movie.title, year: e.movie.year }));
+
+      const traktShows = await traktApi.getWatchedShows(user);
+      watchedShows = (traktShows || []).map(e => ({ title: e.show.title, year: e.show.year }));
+    } catch (e) {
+      console.error('Trakt fetch error for AI picks:', e.message);
+    }
+  }
+
+  // Fall back to local DB watch history
+  if (watchedMovies.length === 0) {
+    const localHistory = repo.getWatchHistory(user);
+    watchedMovies = localHistory.map(h => ({ title: h.title, year: null }));
+  }
+
+  if (watchedMovies.length === 0 && watchedShows.length === 0) {
+    return res.json({ movies: [], shows: [], message: 'No watch history found. Watch some movies first!' });
+  }
+
+  const moviesList = watchedMovies.slice(0, 100).map(m => `${m.title}${m.year ? ` (${m.year})` : ''}`).join('\n');
+  const showsList = watchedShows.slice(0, 50).map(s => `${s.title}${s.year ? ` (${s.year})` : ''}`).join('\n');
+
+  const userPrompt = `Here is a user's watch history:
+
+Movies watched:
+${moviesList}
+
+${showsList ? `Shows watched:\n${showsList}\n` : ''}
+Based on this watch history, recommend:
+- 10-15 movies the user would enjoy but has NOT already watched
+- 5-10 TV shows the user would enjoy but has NOT already watched
+
+Return ONLY valid JSON in this exact format:
+{
+  "recommendations": [
+    {
+      "title": "Movie Title",
+      "year": 2023,
+      "type": "movie",
+      "reason": "Brief reason why they'd like it based on their history",
+      "tmdb_query": "exact title to search on TMDb"
+    }
+  ]
+}`;
+
+  try {
+    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://movies.erix-homelab.site',
+        'X-Title': 'Movie Night AI Picks'
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.0-flash-lite-001',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a movie and TV show recommendation engine. Based on the user watch history, recommend titles they would enjoy but have NOT already watched. Return ONLY valid JSON.'
+          },
+          { role: 'user', content: userPrompt }
+        ],
+        response_format: { type: 'json_object' }
+      })
+    });
+
+    if (!aiResponse.ok) {
+      const errText = await aiResponse.text();
+      console.error('OpenRouter error:', errText);
+      return res.status(500).json({ error: 'AI service error' });
+    }
+
+    const aiData = await aiResponse.json();
+    const content = aiData.choices?.[0]?.message?.content;
+    if (!content) return res.status(500).json({ error: 'No response from AI' });
+
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch (e) {
+      const match = content.match(/\{[\s\S]*\}/);
+      if (match) parsed = JSON.parse(match[0]);
+      else return res.status(500).json({ error: 'Failed to parse AI response' });
+    }
+
+    const recommendations = parsed.recommendations || [];
+
+    // Enrich with TMDb data
+    const enriched = await Promise.all(recommendations.map(async (rec) => {
+      try {
+        const query = rec.tmdb_query || rec.title;
+        const type = rec.type === 'show' ? 'tv' : 'movie';
+        const yearParam = rec.year ? `&year=${rec.year}` : '';
+        const tmdbRes = await fetch(
+          `https://api.themoviedb.org/3/search/${type}?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(query)}${yearParam}&include_adult=false`
+        );
+        const tmdbData = await tmdbRes.json();
+        const result = tmdbData.results?.[0];
+        if (!result) return { ...rec, tmdb: null };
+        return {
+          ...rec,
+          tmdb: {
+            id: result.id,
+            title: result.title || result.name,
+            poster_path: result.poster_path,
+            overview: result.overview,
+            vote_average: result.vote_average,
+            release_date: result.release_date || result.first_air_date
+          }
+        };
+      } catch (e) {
+        return { ...rec, tmdb: null };
+      }
+    }));
+
+    const movies = enriched.filter(r => r.type === 'movie' && r.tmdb);
+    const shows = enriched.filter(r => r.type === 'show' && r.tmdb);
+
+    const result = { movies, shows };
+    aiPicksCache.set(user, { data: result, timestamp: Date.now() });
+    res.json(result);
+  } catch (error) {
+    console.error('AI picks error:', error);
+    res.status(500).json({ error: 'Failed to get AI picks' });
+  }
+});
+
 // ─── Stremio Addon Endpoints ─────────────────────────────────────────────────
 
 const formatMetaPreview = (movie, metadata = {}) => ({
