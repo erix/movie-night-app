@@ -9,6 +9,11 @@ on:
       - 'public/**'
       - 'package*.json'
       - 'Dockerfile'
+      - 'db/**'
+      - 'repository/**'
+      - 'trakt/**'
+      - 'telegram/**'
+      - 'utils/**'
 
 jobs:
   build-and-push:
