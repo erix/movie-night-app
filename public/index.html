@@ -2311,7 +2311,6 @@
             ? `https://image.tmdb.org/t/p/w185${rec.tmdb.poster_path}`
             : `https://via.placeholder.com/120x180?text=${encodeURIComponent(rec.title)}`;
           const year = rec.tmdb.release_date ? rec.tmdb.release_date.split('-')[0] : (rec.year || '');
-          const rating = rec.tmdb.vote_average ? rec.tmdb.vote_average.toFixed(1) : '';
           const nominateBtn = (phase === 'nomination' && !myNomination)
             ? `<button class="ai-pick-nominate" onclick="event.stopPropagation();nominateMovie(${rec.tmdb.id})">+ Nominate</button>`
             : (phase === 'nomination' && myNomination ? `<div style="font-size:0.7em;color:#555;margin-top:4px">Already nominated</div>` : '');
@@ -2322,10 +2321,9 @@
               <div class="ai-pick-info">
                 <div class="ai-pick-title">${rec.tmdb.title}</div>
                 <div class="ai-pick-meta">
-                  ${rating ? `<span>⭐ ${rating}</span>` : ''}
                   ${year ? `<span>${year}</span>` : ''}
                 </div>
-                <div class="ai-pick-reason">${rec.reason}</div>
+                <div class="ratings-row" data-ratings-tmdb="${rec.tmdb.id}"></div>
                 ${nominateBtn}
               </div>
             </div>
@@ -2361,6 +2359,7 @@
         </div>`;
 
         container.innerHTML = html;
+        loadRatingsBadges(container);
       } catch (err) {
         container.innerHTML = `<div class="section-title">🤖 AI Picks</div><div class="waiting-message">⚠️ Failed to load recommendations. Please try again.</div>`;
       }
