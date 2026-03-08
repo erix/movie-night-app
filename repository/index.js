@@ -237,6 +237,11 @@ const saveTraktAuth = (userName, traktUsername, accessToken, refreshToken, expir
  */
 const removeTraktAuth = (userName) => adapter.removeTraktAuth(userName);
 
+// ─── AI Picks Cache ───────────────────────────────────────────────────────────
+
+const getAiPicksCache = (userName) => adapter.getAiPicksCache(userName);
+const setAiPicksCache = (userName, data) => adapter.setAiPicksCache(userName, data);
+
 // ─── Export ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -278,4 +283,8 @@ module.exports = {
   getTraktAuth,
   saveTraktAuth,
   removeTraktAuth,
+
+  // AI picks cache
+  getAiPicksCache,
+  setAiPicksCache,
 };

@@ -46,4 +46,8 @@ module.exports = {
   getTraktAuth: db.getTraktAuth,
   saveTraktAuth: db.saveTraktAuth,
   removeTraktAuth: db.removeTraktAuth,
+
+  // AI picks cache
+  getAiPicksCache: db.getAiPicksCache,
+  setAiPicksCache: db.setAiPicksCache,
 };
