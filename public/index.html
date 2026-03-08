@@ -599,67 +599,81 @@
     }
 
     /* AI Picks */
-    .ai-picks-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 16px;
-      margin-top: 16px;
+    .ai-category-row {
+      overflow-x: auto;
+      display: flex;
+      gap: 12px;
+      padding-bottom: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: #444 transparent;
+      margin-top: 12px;
+    }
+
+    .ai-category-row::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .ai-category-row::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 2px;
     }
 
     .ai-pick-card {
+      flex: 0 0 120px;
       background: #1c1c1c;
       border-radius: 8px;
       overflow: hidden;
       cursor: pointer;
-      transition: transform 0.3s;
+      transition: transform 0.2s;
       display: flex;
       flex-direction: column;
     }
 
     .ai-pick-card:hover {
-      transform: scale(1.04);
+      transform: scale(1.05);
     }
 
     .ai-pick-poster {
-      width: 100%;
-      aspect-ratio: 2/3;
+      width: 120px;
+      height: 180px;
       object-fit: cover;
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      display: block;
     }
 
     .ai-pick-info {
-      padding: 10px;
+      padding: 8px;
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
     }
 
     .ai-pick-title {
-      font-size: 0.9em;
+      font-size: 0.78em;
       font-weight: 700;
       line-height: 1.3;
     }
 
     .ai-pick-meta {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       color: #999;
-      font-size: 0.78em;
+      font-size: 0.72em;
     }
 
     .ai-pick-reason {
-      font-size: 0.75em;
+      font-size: 0.7em;
       color: #aaa;
       font-style: italic;
-      line-height: 1.4;
-      margin-top: 4px;
+      line-height: 1.3;
+      margin-top: 2px;
     }
 
     .ai-pick-nominate {
-      margin-top: 8px;
-      padding: 6px 8px;
-      font-size: 0.78em;
+      margin-top: 6px;
+      padding: 5px 6px;
+      font-size: 0.72em;
       background: #e50914;
       color: white;
       border: none;
@@ -674,9 +688,9 @@
     }
 
     .ai-section-title {
-      font-size: 1.3em;
+      font-size: 1.2em;
       font-weight: 700;
-      margin: 24px 0 8px;
+      margin: 28px 0 4px;
       color: #e50914;
     }
 
@@ -2292,19 +2306,19 @@
         const phase = state?.phase;
         const myNomination = state?.nominations?.find(n => n.proposedBy === currentUser);
 
-        function renderAiCard(rec, showNominate) {
+        function renderAiCard(rec) {
           const posterUrl = rec.tmdb.poster_path
-            ? `https://image.tmdb.org/t/p/w342${rec.tmdb.poster_path}`
-            : `https://via.placeholder.com/160x240?text=${encodeURIComponent(rec.title)}`;
+            ? `https://image.tmdb.org/t/p/w185${rec.tmdb.poster_path}`
+            : `https://via.placeholder.com/120x180?text=${encodeURIComponent(rec.title)}`;
           const year = rec.tmdb.release_date ? rec.tmdb.release_date.split('-')[0] : (rec.year || '');
           const rating = rec.tmdb.vote_average ? rec.tmdb.vote_average.toFixed(1) : '';
-          const nominateBtn = (showNominate && phase === 'nomination' && !myNomination)
+          const nominateBtn = (phase === 'nomination' && !myNomination)
             ? `<button class="ai-pick-nominate" onclick="event.stopPropagation();nominateMovie(${rec.tmdb.id})">+ Nominate</button>`
-            : (showNominate && phase === 'nomination' && myNomination ? `<div style="font-size:0.75em;color:#555;margin-top:6px">Already nominated</div>` : '');
+            : (phase === 'nomination' && myNomination ? `<div style="font-size:0.7em;color:#555;margin-top:4px">Already nominated</div>` : '');
           return `
             <div class="ai-pick-card" onclick="showMovieDetail(${rec.tmdb.id})">
               <img class="ai-pick-poster" src="${posterUrl}" alt="${rec.tmdb.title}"
-                onerror="this.src='https://via.placeholder.com/160x240?text=${encodeURIComponent(rec.title)}'">
+                onerror="this.src='https://via.placeholder.com/120x180?text=${encodeURIComponent(rec.title)}'">
               <div class="ai-pick-info">
                 <div class="ai-pick-title">${rec.tmdb.title}</div>
                 <div class="ai-pick-meta">
@@ -2320,17 +2334,15 @@
 
         let html = `<div class="section-title">🤖 AI Picks <span style="font-size:0.6em;color:#666;font-weight:normal">powered by Gemini</span></div>`;
 
-        if (data.movies && data.movies.length > 0) {
-          html += `<div class="ai-section-title">🎬 Movies For You</div>`;
-          html += `<div class="ai-picks-grid">${data.movies.map(r => renderAiCard(r, true)).join('')}</div>`;
+        const cats = data.categories || [];
+        for (const cat of cats) {
+          if (cat.movies && cat.movies.length > 0) {
+            html += `<div class="ai-section-title">${cat.emoji} ${cat.name}</div>`;
+            html += `<div class="ai-category-row">${cat.movies.map(r => renderAiCard(r)).join('')}</div>`;
+          }
         }
 
-        if (data.shows && data.shows.length > 0) {
-          html += `<div class="ai-section-title">📺 Shows For You</div>`;
-          html += `<div class="ai-picks-grid">${data.shows.map(r => renderAiCard(r, false)).join('')}</div>`;
-        }
-
-        if (!data.movies?.length && !data.shows?.length) {
+        if (!cats.length || cats.every(c => !c.movies?.length)) {
           html += `<div class="waiting-message">No recommendations yet. Try again later.</div>`;
         }
 

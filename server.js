@@ -618,35 +618,48 @@ app.get('/api/ai-picks/:user', async (req, res) => {
     watchedMovies = localHistory.map(h => ({ title: h.title, year: null }));
   }
 
-  if (watchedMovies.length === 0 && watchedShows.length === 0) {
-    return res.json({ movies: [], shows: [], message: 'No watch history found. Watch some movies first!' });
+  if (watchedMovies.length === 0) {
+    return res.json({ categories: [], message: 'No watch history found. Watch some movies first!' });
   }
 
   const moviesList = watchedMovies.slice(0, 100).map(m => `${m.title}${m.year ? ` (${m.year})` : ''}`).join('\n');
-  const showsList = watchedShows.slice(0, 50).map(s => `${s.title}${s.year ? ` (${s.year})` : ''}`).join('\n');
 
-  const userPrompt = `Here is a user's watch history:
+  const userPrompt = `Here is a user's movie watch history:
 
 Movies watched:
 ${moviesList}
 
-${showsList ? `Shows watched:\n${showsList}\n` : ''}
-Based on this watch history, recommend:
-- 10-15 movies the user would enjoy but has NOT already watched
-- 5-10 TV shows the user would enjoy but has NOT already watched
+Based on this watch history, recommend movies the user would enjoy but has NOT already watched.
+Return exactly 8 categories, each with up to 15 movies.
 
 Return ONLY valid JSON in this exact format:
 {
-  "recommendations": [
+  "categories": [
     {
-      "title": "Movie Title",
-      "year": 2023,
-      "type": "movie",
-      "reason": "Brief reason why they'd like it based on their history",
-      "tmdb_query": "exact title to search on TMDb"
+      "id": "picked_for_you",
+      "name": "Picked For You",
+      "emoji": "🎯",
+      "movies": [
+        {
+          "title": "Movie Title",
+          "year": 2022,
+          "reason": "Brief reason why they'd like it based on their history",
+          "tmdb_query": "exact title to search on TMDb"
+        }
+      ]
     }
   ]
-}`;
+}
+
+The 8 categories must be exactly:
+1. id: "picked_for_you", name: "Picked For You", emoji: "🎯" — personalized core recommendations based on their taste
+2. id: "comfort_zone", name: "Your Comfort Zone", emoji: "🛋️" — safe bets very similar to films they already love
+3. id: "expand_horizons", name: "Expand Your Horizons", emoji: "🌍" — films outside their usual genres they might enjoy
+4. id: "hidden_gems", name: "Hidden Gems", emoji: "💎" — underrated or lesser-known films matching their taste
+5. id: "critically_acclaimed", name: "Critically Acclaimed", emoji: "🏆" — highly rated, award-nominated films they have not seen
+6. id: "guilty_pleasures", name: "Guilty Pleasures", emoji: "🍿" — fun, popcorn, crowd-pleasing films
+7. id: "modern_classics", name: "Modern Classics", emoji: "🎬" — must-see films from the last 10-15 years they missed
+8. id: "world_cinema", name: "World Cinema", emoji: "🌏" — international/foreign language films matching their taste`;
 
   try {
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -662,7 +675,7 @@ Return ONLY valid JSON in this exact format:
         messages: [
           {
             role: 'system',
-            content: 'You are a movie and TV show recommendation engine. Based on the user watch history, recommend titles they would enjoy but have NOT already watched. Return ONLY valid JSON.'
+            content: 'You are a movie recommendation engine. Based on the user\'s watch history, recommend movies they would enjoy but have NOT already watched, organized into 8 specific categories. Return ONLY valid JSON.'
           },
           { role: 'user', content: userPrompt }
         ],
@@ -689,40 +702,44 @@ Return ONLY valid JSON in this exact format:
       else return res.status(500).json({ error: 'Failed to parse AI response' });
     }
 
-    const recommendations = parsed.recommendations || [];
+    const categories = parsed.categories || [];
 
-    // Enrich with TMDb data
-    const enriched = await Promise.all(recommendations.map(async (rec) => {
-      try {
-        const query = rec.tmdb_query || rec.title;
-        const type = rec.type === 'show' ? 'tv' : 'movie';
-        const yearParam = rec.year ? `&year=${rec.year}` : '';
-        const tmdbRes = await fetch(
-          `https://api.themoviedb.org/3/search/${type}?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(query)}${yearParam}&include_adult=false`
-        );
-        const tmdbData = await tmdbRes.json();
-        const result = tmdbData.results?.[0];
-        if (!result) return { ...rec, tmdb: null };
-        return {
-          ...rec,
-          tmdb: {
-            id: result.id,
-            title: result.title || result.name,
-            poster_path: result.poster_path,
-            overview: result.overview,
-            vote_average: result.vote_average,
-            release_date: result.release_date || result.first_air_date
-          }
-        };
-      } catch (e) {
-        return { ...rec, tmdb: null };
-      }
+    // Enrich each movie in each category with TMDb data
+    const enrichedCategories = await Promise.all(categories.map(async (cat) => {
+      const movies = await Promise.all((cat.movies || []).map(async (rec) => {
+        try {
+          const query = rec.tmdb_query || rec.title;
+          const yearParam = rec.year ? `&year=${rec.year}` : '';
+          const tmdbRes = await fetch(
+            `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(query)}${yearParam}&include_adult=false`
+          );
+          const tmdbData = await tmdbRes.json();
+          const result = tmdbData.results?.[0];
+          if (!result) return null;
+          return {
+            ...rec,
+            tmdb: {
+              id: result.id,
+              title: result.title,
+              poster_path: result.poster_path,
+              overview: result.overview,
+              vote_average: result.vote_average,
+              release_date: result.release_date
+            }
+          };
+        } catch (e) {
+          return null;
+        }
+      }));
+      return {
+        id: cat.id,
+        name: cat.name,
+        emoji: cat.emoji,
+        movies: movies.filter(Boolean)
+      };
     }));
 
-    const movies = enriched.filter(r => r.type === 'movie' && r.tmdb);
-    const shows = enriched.filter(r => r.type === 'show' && r.tmdb);
-
-    const result = { movies, shows };
+    const result = { categories: enrichedCategories };
     aiPicksCache.set(user, { data: result, timestamp: Date.now() });
     res.json(result);
   } catch (error) {
