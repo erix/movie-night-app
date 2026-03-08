@@ -656,7 +656,7 @@ The 12 categories must be exactly:
       'X-Title': 'Movie Night AI Picks'
     },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash-preview',
+      model: 'google/gemini-2.5-flash',
       messages: [
         {
           role: 'system',
