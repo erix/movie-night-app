@@ -577,9 +577,10 @@ const AI_PICKS_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 app.get('/api/ai-picks/:user', async (req, res) => {
   const { user } = req.params;
 
-  // Check cache
+  // Check cache (skip if ?refresh=1)
+  const forceRefresh = req.query.refresh === '1';
   const cached = aiPicksCache.get(user);
-  if (cached && Date.now() - cached.timestamp < AI_PICKS_CACHE_TTL) {
+  if (!forceRefresh && cached && Date.now() - cached.timestamp < AI_PICKS_CACHE_TTL) {
     return res.json(cached.data);
   }
 

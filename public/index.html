@@ -2345,9 +2345,24 @@
     }
 
     async function refreshAIPicks() {
-      // Invalidate cache by calling with a cache-bust header isn't possible from frontend,
-      // so just reload — server cache is 6h but user can wait
-      await loadAIPicks();
+      // Force server-side cache bust via ?refresh=1
+      const container = document.getElementById('aiPicksContent');
+      container.innerHTML = `
+        <div class="section-title">🤖 AI Picks</div>
+        <div class="waiting-message">
+          <div style="font-size:2em;margin-bottom:12px">🤖</div>
+          Refreshing recommendations...<br>
+          <span style="font-size:0.85em;color:#666">This may take a few seconds</span>
+        </div>
+      `;
+      try {
+        const res = await fetch(`/api/ai-picks/${encodeURIComponent(currentUser)}?refresh=1`);
+        const data = await res.json();
+        // Reload the full tab to re-render
+        await loadAIPicks();
+      } catch (err) {
+        await loadAIPicks();
+      }
     }
 
     // Nominate directly from Trakt watchlist
